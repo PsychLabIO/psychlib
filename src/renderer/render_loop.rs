@@ -89,7 +89,6 @@ impl RenderLoop {
             }
 
             Err(wgpu::SurfaceError::Outdated) => {
-                // Just skip this frame.
                 return;
             }
 

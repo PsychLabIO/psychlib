@@ -9,7 +9,6 @@ pub use stimulus::{Color, Rect, Stimulus, TextOptions};
 use crate::clock::FrameTimestamp;
 use std::sync::mpsc;
 
-/// Commands sent from the script thread to the render thread.
 #[derive(Debug)]
 pub enum RenderCommand {
     Show(Stimulus),

@@ -65,7 +65,7 @@ impl WgpuContext {
             format,
             width: size.width.max(1),
             height: size.height.max(1),
-            present_mode: wgpu::PresentMode::Fifo, // VSync (psychophysics safe)
+            present_mode: wgpu::PresentMode::Fifo,
             alpha_mode: caps.alpha_modes[0],
             view_formats: vec![],
             desired_maximum_frame_latency: 1,
@@ -88,7 +88,6 @@ impl WgpuContext {
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
-        // Skip zero-sized windows (minimized / hidden)
         if width == 0 || height == 0 {
             return;
         }

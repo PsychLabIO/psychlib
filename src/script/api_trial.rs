@@ -5,7 +5,6 @@ use crate::io::{
     response::{ResponseOutcome, ResponseWindow},
 };
 use mlua::prelude::*;
-use tracing::debug;
 
 pub(crate) fn make_trial_table(lua: &Lua, state: &HostState) -> LuaResult<LuaTable> {
     let t = lua.create_table()?;

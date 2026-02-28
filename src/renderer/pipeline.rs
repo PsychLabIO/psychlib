@@ -19,10 +19,6 @@ impl Vertex {
     }
 }
 
-//
-// Unit quad in NDC space centered at origin.
-// We scale + translate in the shader.
-//
 const UNIT_VERTS: &[Vertex] = &[
     Vertex { pos: [-1.0,  1.0] },
     Vertex { pos: [ 1.0,  1.0] },
@@ -90,13 +86,11 @@ pub struct ColorPipeline {
 
 impl ColorPipeline {
     pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
-        // Shader
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("color_shader"),
             source: wgpu::ShaderSource::Wgsl(SHADER.into()),
         });
 
-        // Uniform buffer (32 bytes)
         let uniform_buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("uniform_buffer"),
             size: std::mem::size_of::<Uniforms>() as u64,
@@ -104,7 +98,6 @@ impl ColorPipeline {
             mapped_at_creation: false,
         });
 
-        // Bind group layout
         let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("color_bgl"),
             entries: &[wgpu::BindGroupLayoutEntry {
@@ -119,7 +112,6 @@ impl ColorPipeline {
             }],
         });
 
-        // Bind group
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("color_bind_group"),
             layout: &bgl,
@@ -129,14 +121,12 @@ impl ColorPipeline {
             }],
         });
 
-        // Pipeline layout
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("color_pipeline_layout"),
             bind_group_layouts: &[&bgl],
             immediate_size: 0,
         });
 
-        // Render pipeline
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("color_pipeline"),
             layout: Some(&layout),
@@ -166,7 +156,6 @@ impl ColorPipeline {
             cache: None,
         });
 
-        // Static unit quad buffers
         let vertex_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("unit_quad_vertex_buffer"),
             contents: bytemuck::cast_slice(UNIT_VERTS),
