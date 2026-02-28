@@ -55,6 +55,7 @@ tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 wasm-bindgen = { version = "0.2.114", optional = true }
 js-sys = { version = "0.3.91", optional = true }
 console_error_panic_hook = { version = "0.1.7", optional = true }
+glyphon = "0.10.0"
 
 [dependencies.web-sys]
 version = "0.3.91"

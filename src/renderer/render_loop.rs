@@ -4,6 +4,7 @@ use crate::renderer::{
     context::WgpuContext,
     pipeline::ColorPipeline,
     stimulus::{Color, Stimulus},
+    text::TextRenderer,
 };
 use std::sync::{Arc, mpsc};
 use tracing::{debug, error, info, warn};
@@ -42,7 +43,8 @@ pub struct RenderLoop {
     event_tx: mpsc::SyncSender<RenderEvent>,
     window: Option<Arc<Window>>,
     ctx: Option<WgpuContext>,
-    pipeline: Option<ColorPipeline>,
+    pipeline: Option<Arc<ColorPipeline>>,
+    text_renderer: Option<TextRenderer>,
     current: Option<Stimulus>,
 }
 
@@ -64,50 +66,51 @@ impl RenderLoop {
             window: None,
             ctx: None,
             pipeline: None,
+            text_renderer: None,
             current: None,
         };
         (handle, event_loop, rl)
     }
 
     fn render(&mut self, stim: &Stimulus) {
-        let (ctx, pipeline) = match (self.ctx.as_ref(), self.pipeline.as_ref()) {
-            (Some(c), Some(p)) => (c, p),
-            _ => return,
-        };
+        let Some(ctx) = self.ctx.as_ref() else { return };
 
         if ctx.size.width == 0 || ctx.size.height == 0 {
             return;
         }
 
-        let output = match ctx.surface.get_current_texture() {
+        let device = ctx.device.clone();
+        let queue = ctx.queue.clone();
+
+        let surface_texture = match ctx.surface.get_current_texture() {
             Ok(o) => o,
             Err(wgpu::SurfaceError::Lost) => {
-                if let Some(ctx) = self.ctx.as_mut() {
-                    ctx.resize(ctx.size.width, ctx.size.height);
-                }
+                let (w, h) = (ctx.size.width, ctx.size.height);
+                self.ctx.as_mut().unwrap().resize(w, h);
                 return;
             }
-
-            Err(wgpu::SurfaceError::Outdated) => {
-                return;
-            }
-
+            Err(wgpu::SurfaceError::Outdated) => return,
             Err(e) => {
                 error!("Surface error: {e}");
                 return;
             }
         };
 
-        let view = output
+        let pipeline = match self.pipeline.clone() {
+            Some(p) => p,
+            None => return,
+        };
+
+        let view = surface_texture
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
-        let mut enc = ctx
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("frame"),
-            });
+        let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("frame"),
+        });
 
         let bg = self.config.background;
+        let stim = stim.clone();
+
         {
             let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("frame_pass"),
@@ -131,23 +134,23 @@ impl RenderLoop {
                 multiview_mask: None,
             });
 
-            self.draw(&mut pass, &ctx.queue, &ctx.device, pipeline, stim);
+            self.draw(&mut pass, &queue, &device, &pipeline, &stim);
         }
 
-        ctx.queue.submit(std::iter::once(enc.finish()));
-        output.present();
+        queue.submit(std::iter::once(enc.finish()));
+        surface_texture.present();
 
         let ts = self.clock.record_frame("flip");
         debug!("frame flip: {}", ts.instant);
         let _ = self.event_tx.try_send(RenderEvent::FrameFlipped(ts));
     }
 
-    fn draw(
-        &self,
-        pass: &mut wgpu::RenderPass,
+    fn draw<'pass>(
+        &mut self,
+        pass: &mut wgpu::RenderPass<'pass>,
         queue: &wgpu::Queue,
         device: &wgpu::Device,
-        pipeline: &ColorPipeline,
+        pipeline: &'pass ColorPipeline,
         stim: &Stimulus,
     ) {
         match stim {
@@ -186,10 +189,11 @@ impl RenderLoop {
                     [color.r, color.g, color.b, color.a],
                 );
             }
-            Stimulus::Text { opts, .. } => {
-                warn!("Text stimulus: glyphon not yet integrated");
-                let c = &opts.color;
-                pipeline.draw_quad(pass, queue, 0.0, 0.0, 0.1, 0.05, [c.r, c.g, c.b, c.a]);
+            Stimulus::Text { content, opts, pos } => {
+                if let Some(tr) = self.text_renderer.as_mut() {
+                    tr.prepare(device, queue, content, opts, *pos);
+                    tr.render(pass);
+                }
             }
             Stimulus::Image { rect, tint, .. } => {
                 warn!("Image stimulus: texture pipeline not yet integrated");
@@ -204,7 +208,8 @@ impl RenderLoop {
                 );
             }
             Stimulus::Composite(parts) => {
-                for s in parts {
+                let parts = parts.clone();
+                for s in &parts {
                     self.draw(pass, queue, device, pipeline, s);
                 }
             }
@@ -235,7 +240,15 @@ impl ApplicationHandler for RenderLoop {
         let ctx = pollster::block_on(WgpuContext::new(window.clone()))
             .expect("Failed to initialise wgpu");
 
-        let pipeline = ColorPipeline::new(&ctx.device, ctx.config.format);
+        let pipeline = Arc::new(ColorPipeline::new(&ctx.device, ctx.config.format));
+
+        let text_renderer = TextRenderer::new(
+            &ctx.device,
+            &ctx.queue,
+            ctx.config.format,
+            ctx.size.width,
+            ctx.size.height,
+        );
 
         info!(
             "Render window ready: {}x{}",
@@ -245,6 +258,7 @@ impl ApplicationHandler for RenderLoop {
         self.window = Some(window);
         self.ctx = Some(ctx);
         self.pipeline = Some(pipeline);
+        self.text_renderer = Some(text_renderer);
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
@@ -259,6 +273,10 @@ impl ApplicationHandler for RenderLoop {
                 if size.width > 0 && size.height > 0 {
                     if let Some(ctx) = self.ctx.as_mut() {
                         ctx.resize(size.width, size.height);
+                    }
+                    if let (Some(ctx), Some(tr)) = (self.ctx.as_ref(), self.text_renderer.as_mut())
+                    {
+                        tr.resize(&ctx.queue, size.width, size.height);
                     }
                 }
             }
@@ -284,7 +302,6 @@ impl ApplicationHandler for RenderLoop {
                             event_loop.exit();
                             return;
                         }
-
                         Err(mpsc::TryRecvError::Empty) => break,
                     }
                 }

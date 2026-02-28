@@ -2,6 +2,7 @@ pub mod context;
 pub mod pipeline;
 pub mod render_loop;
 pub mod stimulus;
+pub mod text;
 
 pub use render_loop::{RenderConfig, RenderLoop};
 pub use stimulus::{Color, Rect, Stimulus, TextOptions};
