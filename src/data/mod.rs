@@ -4,4 +4,4 @@ pub mod writer;
 
 pub use record::{RtRaw, TrialRecord};
 pub use session::SessionHeader;
-pub use writer::{data_filename, CsvWriter, DataStore, JsonWriter};
+pub use writer::{CsvWriter, DataStore, JsonWriter, data_filename};

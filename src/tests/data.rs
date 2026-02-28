@@ -2,7 +2,7 @@ use crate::clock::{Clock, Instant};
 use crate::data::record::TrialRecord;
 use crate::data::session::SessionHeader;
 #[allow(unused_imports)]
-use crate::data::writer::{data_filename, CsvWriter, DataStore, JsonWriter};
+use crate::data::writer::{CsvWriter, DataStore, JsonWriter, data_filename};
 use crate::io::keyboard::KeyCode;
 use crate::io::response::Response;
 use crate::scheduler::TrialPhase;

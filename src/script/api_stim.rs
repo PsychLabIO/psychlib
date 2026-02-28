@@ -100,7 +100,7 @@ pub fn make_stim_table(lua: &Lua) -> LuaResult<LuaTable> {
                         return Err(LuaError::runtime(format!(
                             "Stim.composite: expected Stimulus, got {}",
                             other.type_name()
-                        )))
+                        )));
                     }
                 }
             }
@@ -250,7 +250,7 @@ fn parse_text_opts(opts: Option<&LuaTable>) -> LuaResult<TextOptions> {
                 return Err(LuaError::runtime(format!(
                     "Stim.text: align must be \"left\", \"center\", or \"right\", got {:?}",
                     other
-                )))
+                )));
             }
         }
     }

@@ -121,8 +121,16 @@ fn cmd_run(args: RunArgs) -> Result<()> {
     info!("participant : {}", args.participant);
     info!("script      : {}", args.script.display());
     info!("output      : {}", args.output.display());
-    info!("seed        : {}", args.seed.map_or("entropy".into(), |s| s.to_string()));
-    info!("display     : {}x{}{}", args.width, args.height, if args.fullscreen { " (fullscreen)" } else { "" });
+    info!(
+        "seed        : {}",
+        args.seed.map_or("entropy".into(), |s| s.to_string())
+    );
+    info!(
+        "display     : {}x{}{}",
+        args.width,
+        args.height,
+        if args.fullscreen { " (fullscreen)" } else { "" }
+    );
 
     let experiment = ExperimentConfig {
         participant: args.participant,
@@ -171,7 +179,8 @@ fn cmd_info() -> Result<()> {
     println!("winit          : 0.30");
     println!();
     println!("Build");
-    println!("profile        : {}",
+    println!(
+        "profile        : {}",
         if cfg!(debug_assertions) {
             "debug"
         } else {
@@ -218,10 +227,7 @@ fn run_timing_benchmark(clock: &Clock) -> Result<()> {
         );
     }
     if max_us > 2_000 {
-        warn!(
-            "Timing jitter elevated ({} µs)",
-            max_us
-        );
+        warn!("Timing jitter elevated ({} µs)", max_us);
     } else {
         info!("Timing benchmark passed");
     }

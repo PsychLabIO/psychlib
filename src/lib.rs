@@ -19,6 +19,6 @@ pub use io::{
     InputEvent, InputKind, KeyCode, KeyState, MouseButton, Response, ResponseOutcome,
     ResponseWindow,
 };
-pub use runtime::{headless_run, ExperimentConfig};
+pub use runtime::{ExperimentConfig, headless_run};
 pub use scheduler::{Event, EventKind, Scheduler, TrialPhase};
 pub use script::ScriptHost;

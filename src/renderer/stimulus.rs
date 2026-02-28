@@ -154,7 +154,10 @@ impl Rect {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Stimulus {
     /// Solid-colour rectangle
-    Rect { rect: Rect, color: Color },
+    Rect {
+        rect: Rect,
+        color: Color,
+    },
 
     /// UTF-8 text string
     Text {

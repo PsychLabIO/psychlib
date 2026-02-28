@@ -37,7 +37,10 @@ impl WgpuContext {
             .context("No suitable wgpu adapter found")?;
 
         let info_adapter = adapter.get_info();
-        info!("wgpu adapter: {} ({:?})", info_adapter.name, info_adapter.backend);
+        info!(
+            "wgpu adapter: {} ({:?})",
+            info_adapter.name, info_adapter.backend
+        );
 
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {

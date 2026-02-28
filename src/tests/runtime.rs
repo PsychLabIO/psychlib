@@ -1,6 +1,6 @@
 use crate::renderer::RenderConfig;
 #[allow(unused_imports)]
-use crate::runtime::{headless_run, ExperimentConfig};
+use crate::runtime::{ExperimentConfig, headless_run};
 
 #[allow(dead_code)]
 fn config(dir: &std::path::Path, script: &str, seed: u64) -> ExperimentConfig {

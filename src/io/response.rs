@@ -1,5 +1,5 @@
 use crate::clock::{Clock, Duration, Instant};
-use crate::io::keyboard::{flush_key_buffer, poll_key_event, KeyCode, KeyState};
+use crate::io::keyboard::{KeyCode, KeyState, flush_key_buffer, poll_key_event};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use tracing::trace;

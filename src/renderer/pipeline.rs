@@ -7,8 +7,7 @@ pub struct Vertex {
 }
 
 impl Vertex {
-    const ATTRIBS: [wgpu::VertexAttribute; 1] =
-        wgpu::vertex_attr_array![0 => Float32x2];
+    const ATTRIBS: [wgpu::VertexAttribute; 1] = wgpu::vertex_attr_array![0 => Float32x2];
 
     pub fn layout() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
@@ -20,19 +19,14 @@ impl Vertex {
 }
 
 const UNIT_VERTS: &[Vertex] = &[
-    Vertex { pos: [-1.0,  1.0] },
-    Vertex { pos: [ 1.0,  1.0] },
-    Vertex { pos: [ 1.0, -1.0] },
+    Vertex { pos: [-1.0, 1.0] },
+    Vertex { pos: [1.0, 1.0] },
+    Vertex { pos: [1.0, -1.0] },
     Vertex { pos: [-1.0, -1.0] },
 ];
 
 const UNIT_INDICES: &[u16] = &[0, 1, 2, 0, 2, 3];
 
-//
-// Uniform layout:
-// vec4 transform = (cx, cy, hw, hh)
-// vec4 color
-//
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct Uniforms {
@@ -74,7 +68,6 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
     return u.color;
 }
 "#;
-
 
 pub struct ColorPipeline {
     pipeline: wgpu::RenderPipeline,
@@ -192,11 +185,7 @@ impl ColorPipeline {
             color,
         };
 
-        queue.write_buffer(
-            &self.uniform_buf,
-            0,
-            bytemuck::bytes_of(&uniforms),
-        );
+        queue.write_buffer(&self.uniform_buf, 0, bytemuck::bytes_of(&uniforms));
 
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(0, &self.bind_group, &[]);
