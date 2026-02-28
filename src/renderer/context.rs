@@ -9,7 +9,6 @@ pub struct WgpuContext {
     pub queue: wgpu::Queue,
     pub config: wgpu::SurfaceConfiguration,
     pub size: winit::dpi::PhysicalSize<u32>,
-    pub configured: bool,
 }
 
 impl WgpuContext {
@@ -37,22 +36,15 @@ impl WgpuContext {
             .await
             .context("No suitable wgpu adapter found")?;
 
-        info!(
-            "wgpu adapter: {} ({:?})",
-            adapter.get_info().name,
-            adapter.get_info().backend
-        );
+        let info_adapter = adapter.get_info();
+        info!("wgpu adapter: {} ({:?})", info_adapter.name, info_adapter.backend);
 
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: None,
                 required_features: wgpu::Features::empty(),
                 experimental_features: wgpu::ExperimentalFeatures::disabled(),
-                required_limits: if cfg!(target_arch = "wasm32") {
-                    wgpu::Limits::downlevel_webgl2_defaults()
-                } else {
-                    wgpu::Limits::default()
-                },
+                required_limits: wgpu::Limits::default(),
                 memory_hints: Default::default(),
                 trace: wgpu::Trace::Off,
             })
@@ -60,27 +52,30 @@ impl WgpuContext {
             .context("Failed to create wgpu device")?;
 
         let caps = surface.get_capabilities(&adapter);
+
         let format = caps
             .formats
             .iter()
-            .find(|f| f.is_srgb())
             .copied()
+            .find(|f| f.is_srgb())
             .unwrap_or(caps.formats[0]);
 
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format,
-            width: size.width,
-            height: size.height,
-            present_mode: wgpu::PresentMode::Fifo,
+            width: size.width.max(1),
+            height: size.height.max(1),
+            present_mode: wgpu::PresentMode::Fifo, // VSync (psychophysics safe)
             alpha_mode: caps.alpha_modes[0],
             view_formats: vec![],
             desired_maximum_frame_latency: 1,
         };
 
+        surface.configure(&device, &config);
+
         info!(
-            "wgpu surface: {}x{} {:?} Fifo",
-            size.width, size.height, format
+            "wgpu surface configured: {}x{} {:?}",
+            config.width, config.height, config.format
         );
 
         Ok(Self {
@@ -89,18 +84,29 @@ impl WgpuContext {
             queue,
             config,
             size,
-            configured: false,
         })
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
+        // Skip zero-sized windows (minimized / hidden)
         if width == 0 || height == 0 {
             return;
         }
+
+        self.size = winit::dpi::PhysicalSize::new(width, height);
         self.config.width = width;
         self.config.height = height;
+
         self.surface.configure(&self.device, &self.config);
-        self.size = winit::dpi::PhysicalSize::new(width, height);
-        self.configured = true;
+
+        info!("Surface resized: {}x{}", width, height);
+    }
+
+    pub fn reconfigure(&mut self) {
+        if self.config.width == 0 || self.config.height == 0 {
+            return;
+        }
+
+        self.surface.configure(&self.device, &self.config);
     }
 }

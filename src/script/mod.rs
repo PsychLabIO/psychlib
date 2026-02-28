@@ -18,7 +18,6 @@ pub(crate) struct HostState {
     pub data_store: Arc<Mutex<Option<Box<dyn DataStore + Send>>>>,
     pub trial_index: Arc<Mutex<usize>>,
     pub block_index: Arc<Mutex<usize>>,
-    pub records: Arc<Mutex<Vec<serde_json::Value>>>,
     pub render_handle: Arc<Mutex<Option<crate::renderer::RenderHandle>>>,
 }
 
@@ -50,7 +49,6 @@ impl ScriptHost {
             ))),
             trial_index: Arc::new(Mutex::new(0)),
             block_index: Arc::new(Mutex::new(0)),
-            records: Arc::new(Mutex::new(Vec::new())),
             render_handle: Arc::new(Mutex::new(None)),
         };
 

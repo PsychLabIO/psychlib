@@ -9,49 +9,80 @@ use tracing::debug;
 
 pub(crate) fn make_trial_table(lua: &Lua, state: &HostState) -> LuaResult<LuaTable> {
     let t = lua.create_table()?;
-
     {
-        let clock = state.clock.clone();
-        t.set(
-            "blank",
-            lua.create_function(move |_, ms: Option<f64>| {
-                match ms {
-                    Some(ms) if ms > 0.0 => {
-                        clock.sleep(Duration::from_secs(ms / 1000.0));
-                    }
-                    Some(_) => {}
-                    None => {
-                        let mut w = ResponseWindow::new(&clock);
-                        w.arm();
-                        w.wait();
-                    }
-                }
-                Ok(())
-            })?,
-        )?;
-    }
+    let clock = state.clock.clone();
+    let render_handle = state.render_handle.clone();
 
-    {
-        let clock = state.clock.clone();
-        t.set(
-            "show",
-            lua.create_function(move |_, (stim, ms): (LuaValue, Option<f64>)| {
-                debug!(
-                    "Trial.show called (renderer stub): stim={:?} ms={:?}",
-                    stim.type_name(),
-                    ms
-                );
-                match ms {
-                    Some(ms) if ms > 0.0 => {
-                        clock.sleep(Duration::from_secs(ms / 1000.0));
-                    }
-                    None => {}
-                    _ => {}
+    t.set(
+        "blank",
+        lua.create_function(move |_, ms: Option<f64>| {
+
+            if let Some(handle) = render_handle
+                .lock()
+                .expect("render_handle mutex poisoned")
+                .as_ref()
+            {
+                handle.send(crate::renderer::RenderCommand::Clear).expect("Unable to send Clear");
+            }
+
+            if let Some(ms) = ms {
+                if ms > 0.0 {
+                    clock.sleep(Duration::from_secs(ms / 1000.0));
                 }
-                Ok(())
-            })?,
-        )?;
-    }
+            }
+
+            Ok(())
+        })?,
+    )?;
+}
+
+    
+    {
+    let clock = state.clock.clone();
+    let render_handle = state.render_handle.clone();
+
+    t.set(
+    "show",
+    lua.create_function(move |_, (stim_val, ms): (LuaValue, Option<f64>)| {
+
+        // Ensure the value is a table
+        let stim_tbl = match stim_val {
+            LuaValue::Table(tbl) => tbl,
+            other => {
+                return Err(LuaError::runtime(format!(
+                    "Trial.show: expected Stimulus, got {}",
+                    other.type_name()
+                )));
+            }
+        };
+
+        // Decode Stimulus
+        let stim = crate::script::api_stim::lua_to_stim(&stim_tbl)?;
+
+        if let Some(handle) = render_handle
+            .lock()
+            .expect("render_handle mutex poisoned")
+            .as_ref()
+        {
+            handle
+                .send(crate::renderer::RenderCommand::Show(stim))
+                .map_err(LuaError::external)?;
+        } else {
+            tracing::warn!("Trial.show called but no renderer attached");
+        }
+
+        if let Some(ms) = ms {
+            if ms > 0.0 {
+                clock.sleep(Duration::from_secs(ms / 1000.0));
+            }
+        }
+
+        Ok(())
+    })?,
+)?;
+
+}
+
 
     {
         let clock = state.clock.clone();

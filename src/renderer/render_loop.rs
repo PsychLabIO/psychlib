@@ -1,11 +1,11 @@
 use crate::clock::Clock;
 use crate::renderer::{
+    RenderCommand, RenderEvent, RenderHandle,
     context::WgpuContext,
     pipeline::ColorPipeline,
     stimulus::{Color, Stimulus},
-    RenderCommand, RenderEvent, RenderHandle,
 };
-use std::sync::{mpsc, Arc};
+use std::sync::{Arc, mpsc};
 use tracing::{debug, error, info, warn};
 use winit::{
     application::ApplicationHandler,
@@ -75,18 +75,24 @@ impl RenderLoop {
             _ => return,
         };
 
-        if !ctx.configured {
+        if ctx.size.width == 0 || ctx.size.height == 0 {
             return;
         }
 
         let output = match ctx.surface.get_current_texture() {
             Ok(o) => o,
-            Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
-                if let Some(c) = self.ctx.as_mut() {
-                    c.resize(c.size.width, c.size.height);
+            Err(wgpu::SurfaceError::Lost) => {
+                if let Some(ctx) = self.ctx.as_mut() {
+                    ctx.resize(ctx.size.width, ctx.size.height);
                 }
                 return;
             }
+
+            Err(wgpu::SurfaceError::Outdated) => {
+                // Just skip this frame.
+                return;
+            }
+
             Err(e) => {
                 error!("Surface error: {e}");
                 return;
@@ -150,7 +156,6 @@ impl RenderLoop {
                 pipeline.draw_quad(
                     pass,
                     queue,
-                    device,
                     rect.cx,
                     rect.cy,
                     rect.hw,
@@ -166,7 +171,6 @@ impl RenderLoop {
                 pipeline.draw_quad(
                     pass,
                     queue,
-                    device,
                     0.0,
                     0.0,
                     *arm_len,
@@ -176,7 +180,6 @@ impl RenderLoop {
                 pipeline.draw_quad(
                     pass,
                     queue,
-                    device,
                     0.0,
                     0.0,
                     *thickness,
@@ -187,23 +190,13 @@ impl RenderLoop {
             Stimulus::Text { opts, .. } => {
                 warn!("Text stimulus: glyphon not yet integrated");
                 let c = &opts.color;
-                pipeline.draw_quad(
-                    pass,
-                    queue,
-                    device,
-                    0.0,
-                    0.0,
-                    0.1,
-                    0.05,
-                    [c.r, c.g, c.b, c.a],
-                );
+                pipeline.draw_quad(pass, queue, 0.0, 0.0, 0.1, 0.05, [c.r, c.g, c.b, c.a]);
             }
             Stimulus::Image { rect, tint, .. } => {
                 warn!("Image stimulus: texture pipeline not yet integrated");
                 pipeline.draw_quad(
                     pass,
                     queue,
-                    device,
                     rect.cx,
                     rect.cy,
                     rect.hw,
@@ -264,8 +257,10 @@ impl ApplicationHandler for RenderLoop {
             }
 
             WindowEvent::Resized(size) => {
-                if let Some(ctx) = self.ctx.as_mut() {
-                    ctx.resize(size.width, size.height);
+                if size.width > 0 && size.height > 0 {
+                    if let Some(ctx) = self.ctx.as_mut() {
+                        ctx.resize(size.width, size.height);
+                    }
                 }
             }
 
@@ -273,16 +268,14 @@ impl ApplicationHandler for RenderLoop {
                 loop {
                     match self.cmd_rx.try_recv() {
                         Ok(RenderCommand::Show(stim)) => {
-                            self.current = Some(stim.clone());
-                            self.render(&stim);
+                            self.current = Some(stim);
                         }
                         Ok(RenderCommand::Clear) => {
                             self.current = None;
-                            self.render(&Stimulus::blank(self.config.background));
                         }
                         Ok(RenderCommand::ClearColor(c)) => {
                             self.current = None;
-                            self.render(&Stimulus::blank(c));
+                            self.config.background = c;
                         }
                         Ok(RenderCommand::Quit) => {
                             event_loop.exit();
@@ -292,15 +285,22 @@ impl ApplicationHandler for RenderLoop {
                             event_loop.exit();
                             return;
                         }
+
                         Err(mpsc::TryRecvError::Empty) => break,
                     }
                 }
+
+                let stim = self
+                    .current
+                    .clone()
+                    .unwrap_or_else(|| Stimulus::blank(self.config.background));
+
+                self.render(&stim);
 
                 if let Some(w) = &self.window {
                     w.request_redraw();
                 }
             }
-
             _ => {}
         }
     }
