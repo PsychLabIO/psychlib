@@ -2,7 +2,7 @@ use crate::clock::Clock;
 use crate::renderer::{
     RenderCommand, RenderEvent, RenderHandle,
     context::WgpuContext,
-    pipeline::ColorPipeline,
+    pipeline::{ColorPipeline, TexturePipeline, DrawImageOutcome},
     stimulus::{Color, Stimulus},
     text::TextRenderer,
 };
@@ -14,6 +14,8 @@ use winit::{
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     window::{Fullscreen, Window, WindowId},
 };
+
+const MAGENTA: [f32; 4] = [1.0, 0.0, 1.0, 1.0];
 
 #[derive(Debug, Clone)]
 pub struct RenderConfig {
@@ -44,6 +46,7 @@ pub struct RenderLoop {
     window: Option<Arc<Window>>,
     ctx: Option<WgpuContext>,
     pipeline: Option<Arc<ColorPipeline>>,
+    texture_pipeline: Option<TexturePipeline>,
     text_renderer: Option<TextRenderer>,
     current: Option<Stimulus>,
 }
@@ -66,10 +69,35 @@ impl RenderLoop {
             window: None,
             ctx: None,
             pipeline: None,
+            texture_pipeline: None,
             text_renderer: None,
             current: None,
         };
         (handle, event_loop, rl)
+    }
+
+    /// Load `path` into the texture cache and report the outcome back to the
+    /// caller via `RenderEvent::ImageLoaded` / `RenderEvent::ImageLoadFailed`.
+    fn preload_image(&mut self, path: String) {
+        let Some(ctx) = self.ctx.as_ref() else {
+            error!("preload_image called before GPU context is ready");
+            let _ = self.event_tx.try_send(RenderEvent::ImageLoadFailed(path));
+            return;
+        };
+
+        let Some(tp) = self.texture_pipeline.as_mut() else {
+            error!("preload_image called before texture pipeline is ready");
+            let _ = self.event_tx.try_send(RenderEvent::ImageLoadFailed(path));
+            return;
+        };
+
+        let ok = tp.preload(&ctx.device, &ctx.queue, &path);
+        let evt = if ok {
+            RenderEvent::ImageLoaded(path)
+        } else {
+            RenderEvent::ImageLoadFailed(path)
+        };
+        let _ = self.event_tx.try_send(evt);
     }
 
     fn render(&mut self, stim: &Stimulus) {
@@ -165,48 +193,48 @@ impl RenderLoop {
                     [color.r, color.g, color.b, color.a],
                 );
             }
-            Stimulus::Fixation {
-                color,
-                arm_len,
-                thickness,
-            } => {
-                pipeline.draw_quad(
-                    pass,
-                    queue,
-                    0.0,
-                    0.0,
-                    *arm_len,
-                    *thickness,
-                    [color.r, color.g, color.b, color.a],
-                );
-                pipeline.draw_quad(
-                    pass,
-                    queue,
-                    0.0,
-                    0.0,
-                    *thickness,
-                    *arm_len,
-                    [color.r, color.g, color.b, color.a],
-                );
+
+            Stimulus::Fixation { color, arm_len, thickness } => {
+                pipeline.draw_quad(pass, queue, 0.0, 0.0, *arm_len, *thickness,
+                    [color.r, color.g, color.b, color.a]);
+                pipeline.draw_quad(pass, queue, 0.0, 0.0, *thickness, *arm_len,
+                    [color.r, color.g, color.b, color.a]);
             }
+
             Stimulus::Text { content, opts, pos } => {
                 if let Some(tr) = self.text_renderer.as_mut() {
                     tr.prepare(device, queue, content, opts, *pos);
                     tr.render(pass);
                 }
             }
-            Stimulus::Image { rect, tint, .. } => {
-                warn!("Image stimulus: texture pipeline not yet integrated");
-                pipeline.draw_quad(
-                    pass,
-                    queue,
-                    rect.cx,
-                    rect.cy,
-                    rect.hw,
-                    rect.hh,
-                    [tint.r, 0.0, tint.b, tint.a],
-                );
+
+            Stimulus::Image { path, rect, tint } => {
+                let outcome = if let Some(tp) = self.texture_pipeline.as_mut() {
+                    tp.draw_image(
+                        pass,
+                        queue,
+                        path,
+                        rect.cx,
+                        rect.cy,
+                        rect.hw,
+                        rect.hh,
+                        [tint.r, tint.g, tint.b, tint.a],
+                    )
+                } else {
+                    warn!("Image stimulus: texture pipeline not initialised");
+                    DrawImageOutcome::Fallback {
+                        cx: rect.cx,
+                        cy: rect.cy,
+                        hw: rect.hw,
+                        hh: rect.hh,
+                    }
+                };
+
+                if let DrawImageOutcome::Fallback { cx, cy, hw, hh } = outcome {
+                    pipeline.draw_quad(pass, queue, cx, cy, hw, hh, MAGENTA);
+                }
             }
+
             Stimulus::Composite(parts) => {
                 let parts = parts.clone();
                 for s in &parts {
@@ -241,6 +269,7 @@ impl ApplicationHandler for RenderLoop {
             .expect("Failed to initialise wgpu");
 
         let pipeline = Arc::new(ColorPipeline::new(&ctx.device, ctx.config.format));
+        let texture_pipeline = TexturePipeline::new(&ctx.device, ctx.config.format);
 
         let text_renderer = TextRenderer::new(
             &ctx.device,
@@ -258,6 +287,7 @@ impl ApplicationHandler for RenderLoop {
         self.window = Some(window);
         self.ctx = Some(ctx);
         self.pipeline = Some(pipeline);
+        self.texture_pipeline = Some(texture_pipeline);
         self.text_renderer = Some(text_renderer);
     }
 
@@ -274,7 +304,8 @@ impl ApplicationHandler for RenderLoop {
                     if let Some(ctx) = self.ctx.as_mut() {
                         ctx.resize(size.width, size.height);
                     }
-                    if let (Some(ctx), Some(tr)) = (self.ctx.as_ref(), self.text_renderer.as_mut())
+                    if let (Some(ctx), Some(tr)) =
+                        (self.ctx.as_ref(), self.text_renderer.as_mut())
                     {
                         tr.resize(&ctx.queue, size.width, size.height);
                     }
@@ -293,6 +324,9 @@ impl ApplicationHandler for RenderLoop {
                         Ok(RenderCommand::ClearColor(c)) => {
                             self.current = None;
                             self.config.background = c;
+                        }
+                        Ok(RenderCommand::PreloadImage(path)) => {
+                            self.preload_image(path);
                         }
                         Ok(RenderCommand::Quit) => {
                             event_loop.exit();

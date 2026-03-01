@@ -43,7 +43,6 @@ pub(crate) fn make_trial_table(lua: &Lua, state: &HostState) -> LuaResult<LuaTab
         t.set(
             "show",
             lua.create_function(move |_, (stim_val, ms): (LuaValue, Option<f64>)| {
-                // Ensure the value is a table
                 let stim_tbl = match stim_val {
                     LuaValue::Table(tbl) => tbl,
                     other => {
@@ -54,7 +53,6 @@ pub(crate) fn make_trial_table(lua: &Lua, state: &HostState) -> LuaResult<LuaTab
                     }
                 };
 
-                // Decode Stimulus
                 let stim = crate::script::api_stim::lua_to_stim(&stim_tbl)?;
 
                 if let Some(handle) = render_handle
@@ -76,6 +74,30 @@ pub(crate) fn make_trial_table(lua: &Lua, state: &HostState) -> LuaResult<LuaTab
                 }
 
                 Ok(())
+            })?,
+        )?;
+    }
+
+    {
+        let render_handle = state.render_handle.clone();
+
+        t.set(
+            "preload_image",
+            lua.create_function(move |_, path: String| {
+                let guard = render_handle
+                    .lock()
+                    .expect("render_handle mutex poisoned");
+
+                let Some(handle) = guard.as_ref() else {
+                    return Err(LuaError::runtime(
+                        "Trial.preload_image: no renderer attached",
+                    ));
+                };
+
+                handle
+                    .preload_image(&path)
+                    .map(|_| ())
+                    .map_err(LuaError::external)
             })?,
         )?;
     }

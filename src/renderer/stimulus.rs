@@ -112,7 +112,6 @@ impl Default for TextOptions {
 }
 
 /// A rectangle in normalised screen coordinates [-1, 1].
-/// (0, 0) is screen centre.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Rect {
     pub cx: f32,

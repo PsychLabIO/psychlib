@@ -15,6 +15,7 @@ pub enum RenderCommand {
     Show(Stimulus),
     Clear,
     ClearColor(Color),
+    PreloadImage(String),
     Quit,
 }
 
@@ -22,6 +23,8 @@ pub enum RenderCommand {
 #[derive(Debug)]
 pub enum RenderEvent {
     FrameFlipped(FrameTimestamp),
+    ImageLoaded(String),
+    ImageLoadFailed(String),
     WindowClosed,
     Error(String),
 }
@@ -49,7 +52,23 @@ impl RenderHandle {
         self.event_rx.try_recv().ok()
     }
 
-    /// Send `Show(stim)`, block until `FrameFlipped`
+    /// Preload an image and block until the renderer confirms success or failure.
+    pub fn preload_image(&self, path: impl Into<String>) -> Result<String, String> {
+        let path = path.into();
+        self.send(RenderCommand::PreloadImage(path))?;
+        loop {
+            match self.recv()? {
+                RenderEvent::ImageLoaded(p) => return Ok(p),
+                RenderEvent::ImageLoadFailed(p) => return Err(format!("failed to load image: {p}")),
+                RenderEvent::WindowClosed => return Err("window closed".into()),
+                RenderEvent::Error(e) => return Err(e),
+                // Keep waiting through unrelated frame flips.
+                RenderEvent::FrameFlipped(_) => continue,
+            }
+        }
+    }
+
+    /// Send `Show(stim)`, block until `FrameFlipped`.
     pub fn show_and_wait_flip(&self, stim: Stimulus) -> Result<crate::clock::Instant, String> {
         self.send(RenderCommand::Show(stim))?;
         loop {
@@ -57,6 +76,8 @@ impl RenderHandle {
                 RenderEvent::FrameFlipped(ts) => return Ok(ts.instant),
                 RenderEvent::WindowClosed => return Err("window closed".into()),
                 RenderEvent::Error(e) => return Err(e),
+                // Don't treat image events as flips — keep waiting.
+                RenderEvent::ImageLoaded(_) | RenderEvent::ImageLoadFailed(_) => continue,
             }
         }
     }
@@ -69,6 +90,7 @@ impl RenderHandle {
                 RenderEvent::FrameFlipped(ts) => return Ok(ts.instant),
                 RenderEvent::WindowClosed => return Err("window closed".into()),
                 RenderEvent::Error(e) => return Err(e),
+                RenderEvent::ImageLoaded(_) | RenderEvent::ImageLoadFailed(_) => continue,
             }
         }
     }
