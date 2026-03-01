@@ -46,9 +46,19 @@ impl Color {
         b: 0.5,
         a: 1.0,
     };
+    pub const MAGENTA: Self = Self {
+        r: 1.0, 
+        g: 0.0,
+        b: 1.0,
+        a: 1.0
+    };
 
     pub fn new(r: f32, g: f32, b: f32, a: f32) -> Self {
         Self { r, g, b, a }
+    }
+
+    pub fn to_array(self) -> [f32; 4] {
+        [self.r, self.g, self.b, self.a]
     }
 
     /// Parse a CSS hex string: `"#RRGGBB"` or `"#RRGGBBAA"`.

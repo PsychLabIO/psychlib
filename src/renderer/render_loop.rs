@@ -15,8 +15,6 @@ use winit::{
     window::{Fullscreen, Window, WindowId},
 };
 
-const MAGENTA: [f32; 4] = [1.0, 0.0, 1.0, 1.0];
-
 #[derive(Debug, Clone)]
 pub struct RenderConfig {
     pub title: String,
@@ -231,7 +229,7 @@ impl RenderLoop {
                 };
 
                 if let DrawImageOutcome::Fallback { cx, cy, hw, hh } = outcome {
-                    pipeline.draw_quad(pass, queue, cx, cy, hw, hh, MAGENTA);
+                    pipeline.draw_quad(pass, queue, cx, cy, hw, hh, Color::MAGENTA.to_array());
                 }
             }
 
