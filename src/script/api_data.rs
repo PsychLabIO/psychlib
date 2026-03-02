@@ -31,16 +31,12 @@ pub(crate) fn make_data_table(lua: &Lua, state: &HostState) -> LuaResult<LuaTabl
 
                 debug!("Data.record: trial={} block={}", trial_i, block_i);
 
-                {
-                    let mut store = state.data_store.lock().expect("data_store poisoned");
-                    if let Some(ref mut writer) = *store {
-                        writer
-                            .write_trial(&record)
-                            .map_err(|e| LuaError::runtime(e.to_string()))?;
-                    }
+                let mut store = state.data_store.lock().expect("data_store poisoned");
+                if let Some(ref mut writer) = *store {
+                    writer
+                        .write_trial(&record)
+                        .map_err(|e| LuaError::runtime(e.to_string()))?;
                 }
-
-                *state.trial_index.lock().expect("trial_index poisoned") += 1;
 
                 Ok(())
             })?,
@@ -60,16 +56,6 @@ pub(crate) fn make_data_table(lua: &Lua, state: &HostState) -> LuaResult<LuaTabl
                         .map_err(|e| LuaError::runtime(e.to_string()))?;
                 }
                 Ok(())
-            })?,
-        )?;
-    }
-
-    {
-        let trial_index = state.trial_index.clone();
-        t.set(
-            "trial_index",
-            lua.create_function(move |_, ()| {
-                Ok(*trial_index.lock().expect("trial_index poisoned"))
             })?,
         )?;
     }
