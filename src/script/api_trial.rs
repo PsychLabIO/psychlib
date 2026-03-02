@@ -13,34 +13,6 @@ pub(crate) fn make_trial_table(lua: &Lua, state: &HostState) -> LuaResult<LuaTab
         let render_handle = state.render_handle.clone();
 
         t.set(
-            "blank",
-            lua.create_function(move |_, ms: Option<f64>| {
-                if let Some(handle) = render_handle
-                    .lock()
-                    .expect("render_handle mutex poisoned")
-                    .as_ref()
-                {
-                    handle
-                        .send(crate::renderer::RenderCommand::Clear)
-                        .expect("Unable to send Clear");
-                }
-
-                if let Some(ms) = ms {
-                    if ms > 0.0 {
-                        clock.sleep(Duration::from_secs(ms / 1000.0));
-                    }
-                }
-
-                Ok(())
-            })?,
-        )?;
-    }
-
-    {
-        let clock = state.clock.clone();
-        let render_handle = state.render_handle.clone();
-
-        t.set(
             "show",
             lua.create_function(move |_, (stim_val, ms): (LuaValue, Option<f64>)| {
                 let stim_tbl = match stim_val {
@@ -55,21 +27,71 @@ pub(crate) fn make_trial_table(lua: &Lua, state: &HostState) -> LuaResult<LuaTab
 
                 let stim = crate::script::api_stim::lua_to_stim(&stim_tbl)?;
 
-                if let Some(handle) = render_handle
-                    .lock()
-                    .expect("render_handle mutex poisoned")
-                    .as_ref()
-                {
-                    handle
-                        .send(crate::renderer::RenderCommand::Show(stim))
-                        .map_err(LuaError::external)?;
-                } else {
-                    tracing::warn!("Trial.show called but no renderer attached");
-                }
+                let flip_instant = {
+                    let guard = render_handle
+                        .lock()
+                        .expect("render_handle mutex poisoned");
+
+                    match guard.as_ref() {
+                        Some(handle) => handle
+                            .show_and_wait_flip(stim)
+                            .map_err(LuaError::external)?,
+                        None => {
+                            tracing::warn!("Trial.show called but no renderer attached");
+                            if let Some(ms) = ms {
+                                if ms > 0.0 {
+                                    clock.sleep(Duration::from_secs(ms / 1000.0));
+                                }
+                            }
+                            return Ok(());
+                        }
+                    }
+                };
 
                 if let Some(ms) = ms {
                     if ms > 0.0 {
-                        clock.sleep(Duration::from_secs(ms / 1000.0));
+                        let target = flip_instant + Duration::from_secs(ms / 1000.0);
+                        clock.sleep_until(target);
+                    }
+                }
+
+                Ok(())
+            })?,
+        )?;
+    }
+
+    {
+        let clock = state.clock.clone();
+        let render_handle = state.render_handle.clone();
+
+        t.set(
+            "blank",
+            lua.create_function(move |_, ms: Option<f64>| {
+                let flip_instant = {
+                    let guard = render_handle
+                        .lock()
+                        .expect("render_handle mutex poisoned");
+
+                    match guard.as_ref() {
+                        Some(handle) => handle
+                            .clear_and_wait_flip()
+                            .map_err(LuaError::external)?,
+                        None => {
+                            tracing::warn!("Trial.blank called but no renderer attached");
+                            if let Some(ms) = ms {
+                                if ms > 0.0 {
+                                    clock.sleep(Duration::from_secs(ms / 1000.0));
+                                }
+                            }
+                            return Ok(());
+                        }
+                    }
+                };
+
+                if let Some(ms) = ms {
+                    if ms > 0.0 {
+                        let target = flip_instant + Duration::from_secs(ms / 1000.0);
+                        clock.sleep_until(target);
                     }
                 }
 
@@ -84,7 +106,9 @@ pub(crate) fn make_trial_table(lua: &Lua, state: &HostState) -> LuaResult<LuaTab
         t.set(
             "preload_image",
             lua.create_function(move |_, path: String| {
-                let guard = render_handle.lock().expect("render_handle mutex poisoned");
+                let guard = render_handle
+                    .lock()
+                    .expect("render_handle mutex poisoned");
 
                 let Some(handle) = guard.as_ref() else {
                     return Err(LuaError::runtime(
