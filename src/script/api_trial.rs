@@ -84,9 +84,7 @@ pub(crate) fn make_trial_table(lua: &Lua, state: &HostState) -> LuaResult<LuaTab
         t.set(
             "preload_image",
             lua.create_function(move |_, path: String| {
-                let guard = render_handle
-                    .lock()
-                    .expect("render_handle mutex poisoned");
+                let guard = render_handle.lock().expect("render_handle mutex poisoned");
 
                 let Some(handle) = guard.as_ref() else {
                     return Err(LuaError::runtime(

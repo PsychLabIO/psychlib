@@ -2,7 +2,7 @@ use crate::clock::Clock;
 use crate::renderer::{
     RenderCommand, RenderEvent, RenderHandle,
     context::WgpuContext,
-    pipeline::{ColorPipeline, TexturePipeline, DrawImageOutcome},
+    pipeline::{ColorPipeline, DrawImageOutcome, TexturePipeline},
     stimulus::{Color, Stimulus},
     text::TextRenderer,
 };
@@ -74,8 +74,6 @@ impl RenderLoop {
         (handle, event_loop, rl)
     }
 
-    /// Load `path` into the texture cache and report the outcome back to the
-    /// caller via `RenderEvent::ImageLoaded` / `RenderEvent::ImageLoadFailed`.
     fn preload_image(&mut self, path: String) {
         let Some(ctx) = self.ctx.as_ref() else {
             error!("preload_image called before GPU context is ready");
@@ -160,7 +158,7 @@ impl RenderLoop {
                 multiview_mask: None,
             });
 
-            self.draw(&mut pass, &queue, &device, &pipeline, &stim);
+            self.draw(&mut pass, &device, &queue, &pipeline, &stim);
         }
 
         queue.submit(std::iter::once(enc.finish()));
@@ -174,8 +172,8 @@ impl RenderLoop {
     fn draw<'pass>(
         &mut self,
         pass: &mut wgpu::RenderPass<'pass>,
-        queue: &wgpu::Queue,
         device: &wgpu::Device,
+        queue: &wgpu::Queue,
         pipeline: &'pass ColorPipeline,
         stim: &Stimulus,
     ) {
@@ -188,21 +186,38 @@ impl RenderLoop {
                     rect.cy,
                     rect.hw,
                     rect.hh,
-                    [color.r, color.g, color.b, color.a],
+                    color.to_array(),
                 );
             }
 
-            Stimulus::Fixation { color, arm_len, thickness } => {
-                pipeline.draw_quad(pass, queue, 0.0, 0.0, *arm_len, *thickness,
-                    [color.r, color.g, color.b, color.a]);
-                pipeline.draw_quad(pass, queue, 0.0, 0.0, *thickness, *arm_len,
-                    [color.r, color.g, color.b, color.a]);
+            Stimulus::Fixation {
+                color,
+                arm_len,
+                thickness,
+            } => {
+                pipeline.draw_quad(
+                    pass,
+                    queue,
+                    0.0,
+                    0.0,
+                    *arm_len,
+                    *thickness,
+                    color.to_array(),
+                );
+                pipeline.draw_quad(
+                    pass,
+                    queue,
+                    0.0,
+                    0.0,
+                    *thickness,
+                    *arm_len,
+                    color.to_array(),
+                );
             }
 
             Stimulus::Text { content, opts, pos } => {
                 if let Some(tr) = self.text_renderer.as_mut() {
-                    tr.prepare(device, queue, content, opts, *pos);
-                    tr.render(pass);
+                    tr.draw(device, queue, pass, content, opts, *pos);
                 }
             }
 
@@ -216,7 +231,7 @@ impl RenderLoop {
                         rect.cy,
                         rect.hw,
                         rect.hh,
-                        [tint.r, tint.g, tint.b, tint.a],
+                        tint.to_array(),
                     )
                 } else {
                     warn!("Image stimulus: texture pipeline not initialised");
@@ -236,7 +251,7 @@ impl RenderLoop {
             Stimulus::Composite(parts) => {
                 let parts = parts.clone();
                 for s in &parts {
-                    self.draw(pass, queue, device, pipeline, s);
+                    self.draw(pass, device, queue, pipeline, s);
                 }
             }
         }
@@ -302,8 +317,7 @@ impl ApplicationHandler for RenderLoop {
                     if let Some(ctx) = self.ctx.as_mut() {
                         ctx.resize(size.width, size.height);
                     }
-                    if let (Some(ctx), Some(tr)) =
-                        (self.ctx.as_ref(), self.text_renderer.as_mut())
+                    if let (Some(ctx), Some(tr)) = (self.ctx.as_ref(), self.text_renderer.as_mut())
                     {
                         tr.resize(&ctx.queue, size.width, size.height);
                     }

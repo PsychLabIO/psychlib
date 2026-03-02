@@ -1,5 +1,5 @@
-use std::collections::{HashMap, HashSet};
 use image::GenericImageView;
+use std::collections::{HashMap, HashSet};
 use tracing::{error, info, warn};
 use wgpu::util::DeviceExt;
 
@@ -22,9 +22,9 @@ impl ColorVertex {
 }
 
 const UNIT_VERTS: &[ColorVertex] = &[
-    ColorVertex { pos: [-1.0,  1.0] },
-    ColorVertex { pos: [ 1.0,  1.0] },
-    ColorVertex { pos: [ 1.0, -1.0] },
+    ColorVertex { pos: [-1.0, 1.0] },
+    ColorVertex { pos: [1.0, 1.0] },
+    ColorVertex { pos: [1.0, -1.0] },
     ColorVertex { pos: [-1.0, -1.0] },
 ];
 
@@ -164,7 +164,13 @@ impl ColorPipeline {
             usage: wgpu::BufferUsages::INDEX,
         });
 
-        Self { pipeline, uniform_buf, bind_group, vertex_buf, index_buf }
+        Self {
+            pipeline,
+            uniform_buf,
+            bind_group,
+            vertex_buf,
+            index_buf,
+        }
     }
 
     pub fn draw_quad(
@@ -348,7 +354,9 @@ impl TexturePipeline {
 
         let tint_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("tint_ubuf"),
-            contents: bytemuck::bytes_of(&TintUniform { color: [1.0, 1.0, 1.0, 1.0] }),
+            contents: bytemuck::bytes_of(&TintUniform {
+                color: [1.0, 1.0, 1.0, 1.0],
+            }),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
@@ -426,12 +434,30 @@ impl TexturePipeline {
         let (b, t) = (cy - hh, cy + hh);
 
         let verts: [TextureVertex; 6] = [
-            TextureVertex { pos: [l, t], uv: [0.0, 0.0] },
-            TextureVertex { pos: [r, t], uv: [1.0, 0.0] },
-            TextureVertex { pos: [l, b], uv: [0.0, 1.0] },
-            TextureVertex { pos: [l, b], uv: [0.0, 1.0] },
-            TextureVertex { pos: [r, t], uv: [1.0, 0.0] },
-            TextureVertex { pos: [r, b], uv: [1.0, 1.0] },
+            TextureVertex {
+                pos: [l, t],
+                uv: [0.0, 0.0],
+            },
+            TextureVertex {
+                pos: [r, t],
+                uv: [1.0, 0.0],
+            },
+            TextureVertex {
+                pos: [l, b],
+                uv: [0.0, 1.0],
+            },
+            TextureVertex {
+                pos: [l, b],
+                uv: [0.0, 1.0],
+            },
+            TextureVertex {
+                pos: [r, t],
+                uv: [1.0, 0.0],
+            },
+            TextureVertex {
+                pos: [r, b],
+                uv: [1.0, 1.0],
+            },
         ];
         queue.write_buffer(&self.vertex_buf, 0, bytemuck::cast_slice(&verts));
         queue.write_buffer(
@@ -440,9 +466,9 @@ impl TexturePipeline {
             bytemuck::bytes_of(&TintUniform { color: tint }),
         );
 
-        let pipeline  = &self.pipeline;
-        let tex_bg    = &gpu_tex.bind_group;
-        let tint_bg   = &self.tint_bg;
+        let pipeline = &self.pipeline;
+        let tex_bg = &gpu_tex.bind_group;
+        let tint_bg = &self.tint_bg;
         let vertex_buf = self.vertex_buf.slice(..);
 
         pass.set_pipeline(pipeline);
@@ -475,7 +501,11 @@ impl TexturePipeline {
             queue,
             &wgpu::TextureDescriptor {
                 label: Some(path),
-                size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,

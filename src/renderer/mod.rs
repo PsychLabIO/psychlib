@@ -59,7 +59,9 @@ impl RenderHandle {
         loop {
             match self.recv()? {
                 RenderEvent::ImageLoaded(p) => return Ok(p),
-                RenderEvent::ImageLoadFailed(p) => return Err(format!("failed to load image: {p}")),
+                RenderEvent::ImageLoadFailed(p) => {
+                    return Err(format!("failed to load image: {p}"));
+                }
                 RenderEvent::WindowClosed => return Err("window closed".into()),
                 RenderEvent::Error(e) => return Err(e),
                 // Keep waiting through unrelated frame flips.
