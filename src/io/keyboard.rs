@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 use std::fmt;
+use std::sync::Mutex;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -8,13 +10,9 @@ pub enum KeyState {
     Released,
 }
 
-/// A physical keyboard key, before any layout mapping.
-/// Used internally by the platform layer; experiment code works with `KeyCode`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct PhysicalKey(pub u32);
 
-/// Luau scripts refer to letter keys by their lowercase character string
-/// ("f", "j") which maps to `KeyCode::F`, `KeyCode::J`, etc.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum KeyCode {
@@ -44,7 +42,6 @@ pub enum KeyCode {
     X,
     Y,
     Z,
-
     Key0,
     Key1,
     Key2,
@@ -55,7 +52,6 @@ pub enum KeyCode {
     Key7,
     Key8,
     Key9,
-
     F1,
     F2,
     F3,
@@ -68,7 +64,6 @@ pub enum KeyCode {
     F10,
     F11,
     F12,
-
     Space,
     Return,
     Escape,
@@ -78,14 +73,12 @@ pub enum KeyCode {
     RightArrow,
     UpArrow,
     DownArrow,
-
     LeftShift,
     RightShift,
     LeftCtrl,
     RightCtrl,
     LeftAlt,
     RightAlt,
-
     Numpad0,
     Numpad1,
     Numpad2,
@@ -97,7 +90,6 @@ pub enum KeyCode {
     Numpad8,
     Numpad9,
     NumpadEnter,
-
     Other(u32),
 }
 
@@ -105,7 +97,6 @@ impl KeyCode {
     pub fn from_name(name: &str) -> Option<Self> {
         use KeyCode::*;
         Some(match name.to_lowercase().as_str() {
-            // Letters
             "a" => A,
             "b" => B,
             "c" => C,
@@ -132,7 +123,6 @@ impl KeyCode {
             "x" => X,
             "y" => Y,
             "z" => Z,
-            // Digits
             "0" => Key0,
             "1" => Key1,
             "2" => Key2,
@@ -143,7 +133,6 @@ impl KeyCode {
             "7" => Key7,
             "8" => Key8,
             "9" => Key9,
-            // Function keys
             "f1" => F1,
             "f2" => F2,
             "f3" => F3,
@@ -156,7 +145,6 @@ impl KeyCode {
             "f10" => F10,
             "f11" => F11,
             "f12" => F12,
-            // Special
             "space" | " " => Space,
             "return" | "enter" => Return,
             "escape" | "esc" => Escape,
@@ -170,7 +158,6 @@ impl KeyCode {
         })
     }
 
-    /// Return the canonical lowercase name for this key, matching the Luau API.
     pub fn as_name(&self) -> &'static str {
         use KeyCode::*;
         match self {
@@ -259,6 +246,80 @@ impl KeyCode {
             LeftShift | RightShift | LeftCtrl | RightCtrl | LeftAlt | RightAlt
         )
     }
+
+    /// Convert a winit logical key to our KeyCode.
+    pub fn from_winit(key: &winit::keyboard::Key) -> Option<Self> {
+        use winit::keyboard::{Key, NamedKey};
+        Some(match key {
+            Key::Character(s) => match s.as_str() {
+                "a" | "A" => Self::A,
+                "b" | "B" => Self::B,
+                "c" | "C" => Self::C,
+                "d" | "D" => Self::D,
+                "e" | "E" => Self::E,
+                "f" | "F" => Self::F,
+                "g" | "G" => Self::G,
+                "h" | "H" => Self::H,
+                "i" | "I" => Self::I,
+                "j" | "J" => Self::J,
+                "k" | "K" => Self::K,
+                "l" | "L" => Self::L,
+                "m" | "M" => Self::M,
+                "n" | "N" => Self::N,
+                "o" | "O" => Self::O,
+                "p" | "P" => Self::P,
+                "q" | "Q" => Self::Q,
+                "r" | "R" => Self::R,
+                "s" | "S" => Self::S,
+                "t" | "T" => Self::T,
+                "u" | "U" => Self::U,
+                "v" | "V" => Self::V,
+                "w" | "W" => Self::W,
+                "x" | "X" => Self::X,
+                "y" | "Y" => Self::Y,
+                "z" | "Z" => Self::Z,
+                "0" => Self::Key0,
+                "1" => Self::Key1,
+                "2" => Self::Key2,
+                "3" => Self::Key3,
+                "4" => Self::Key4,
+                "5" => Self::Key5,
+                "6" => Self::Key6,
+                "7" => Self::Key7,
+                "8" => Self::Key8,
+                "9" => Self::Key9,
+                _ => return None,
+            },
+            Key::Named(n) => match n {
+                NamedKey::Space => Self::Space,
+                NamedKey::Enter => Self::Return,
+                NamedKey::Escape => Self::Escape,
+                NamedKey::Backspace => Self::Backspace,
+                NamedKey::Tab => Self::Tab,
+                NamedKey::ArrowLeft => Self::LeftArrow,
+                NamedKey::ArrowRight => Self::RightArrow,
+                NamedKey::ArrowUp => Self::UpArrow,
+                NamedKey::ArrowDown => Self::DownArrow,
+                NamedKey::Shift => Self::LeftShift,
+                NamedKey::Control => Self::LeftCtrl,
+                NamedKey::Alt => Self::LeftAlt,
+                NamedKey::F1 => Self::F1,
+                NamedKey::F2 => Self::F2,
+                NamedKey::F3 => Self::F3,
+                NamedKey::F4 => Self::F4,
+                NamedKey::F5 => Self::F5,
+                NamedKey::F6 => Self::F6,
+                NamedKey::F7 => Self::F7,
+                NamedKey::F8 => Self::F8,
+                NamedKey::F9 => Self::F9,
+                NamedKey::F10 => Self::F10,
+                NamedKey::F11 => Self::F11,
+                NamedKey::F12 => Self::F12,
+                _ => return None,
+            },
+            _ => return None,
+        })
+    }
 }
 
 impl fmt::Display for KeyCode {
@@ -267,136 +328,23 @@ impl fmt::Display for KeyCode {
     }
 }
 
+static KEY_QUEUE: Mutex<VecDeque<(KeyCode, KeyState)>> = Mutex::new(VecDeque::new());
+
+/// Called by the winit event handler on the render thread.
+pub fn push_key_event(code: KeyCode, state: KeyState) {
+    if let Ok(mut q) = KEY_QUEUE.lock() {
+        q.push_back((code, state));
+    }
+}
+
+/// Called by ResponseWindow on the script thread.
 pub fn poll_key_event() -> Option<(KeyCode, KeyState)> {
-    platform::poll_key_event()
+    KEY_QUEUE.lock().ok()?.pop_front()
 }
 
+/// Discard all pending key events
 pub fn flush_key_buffer() {
-    platform::flush_key_buffer();
-}
-
-mod platform {
-    use super::{KeyCode, KeyState};
-
-    #[cfg(not(target_arch = "wasm32"))]
-    pub fn poll_key_event() -> Option<(KeyCode, KeyState)> {
-        use crossterm::event::{self, Event, KeyEventKind};
-        use std::time::Duration;
-
-        if !event::poll(Duration::ZERO).unwrap_or(false) {
-            return None;
-        }
-
-        match event::read().ok()? {
-            Event::Key(key_event) => {
-                let state = match key_event.kind {
-                    KeyEventKind::Press => KeyState::Pressed,
-                    KeyEventKind::Release => KeyState::Released,
-                    KeyEventKind::Repeat => KeyState::Pressed,
-                };
-                let code = crossterm_code_to_keycode(key_event.code);
-                Some((code, state))
-            }
-            _ => None,
-        }
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    pub fn flush_key_buffer() {
-        use crossterm::event::{self};
-        use std::time::Duration;
-        while event::poll(Duration::ZERO).unwrap_or(false) {
-            let _ = event::read();
-        }
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    fn crossterm_code_to_keycode(code: crossterm::event::KeyCode) -> KeyCode {
-        use crossterm::event::KeyCode as CT;
-        match code {
-            CT::Char('a') | CT::Char('A') => KeyCode::A,
-            CT::Char('b') | CT::Char('B') => KeyCode::B,
-            CT::Char('c') | CT::Char('C') => KeyCode::C,
-            CT::Char('d') | CT::Char('D') => KeyCode::D,
-            CT::Char('e') | CT::Char('E') => KeyCode::E,
-            CT::Char('f') | CT::Char('F') => KeyCode::F,
-            CT::Char('g') | CT::Char('G') => KeyCode::G,
-            CT::Char('h') | CT::Char('H') => KeyCode::H,
-            CT::Char('i') | CT::Char('I') => KeyCode::I,
-            CT::Char('j') | CT::Char('J') => KeyCode::J,
-            CT::Char('k') | CT::Char('K') => KeyCode::K,
-            CT::Char('l') | CT::Char('L') => KeyCode::L,
-            CT::Char('m') | CT::Char('M') => KeyCode::M,
-            CT::Char('n') | CT::Char('N') => KeyCode::N,
-            CT::Char('o') | CT::Char('O') => KeyCode::O,
-            CT::Char('p') | CT::Char('P') => KeyCode::P,
-            CT::Char('q') | CT::Char('Q') => KeyCode::Q,
-            CT::Char('r') | CT::Char('R') => KeyCode::R,
-            CT::Char('s') | CT::Char('S') => KeyCode::S,
-            CT::Char('t') | CT::Char('T') => KeyCode::T,
-            CT::Char('u') | CT::Char('U') => KeyCode::U,
-            CT::Char('v') | CT::Char('V') => KeyCode::V,
-            CT::Char('w') | CT::Char('W') => KeyCode::W,
-            CT::Char('x') | CT::Char('X') => KeyCode::X,
-            CT::Char('y') | CT::Char('Y') => KeyCode::Y,
-            CT::Char('z') | CT::Char('Z') => KeyCode::Z,
-            CT::Char('0') => KeyCode::Key0,
-            CT::Char('1') => KeyCode::Key1,
-            CT::Char('2') => KeyCode::Key2,
-            CT::Char('3') => KeyCode::Key3,
-            CT::Char('4') => KeyCode::Key4,
-            CT::Char('5') => KeyCode::Key5,
-            CT::Char('6') => KeyCode::Key6,
-            CT::Char('7') => KeyCode::Key7,
-            CT::Char('8') => KeyCode::Key8,
-            CT::Char('9') => KeyCode::Key9,
-            CT::F(1) => KeyCode::F1,
-            CT::F(2) => KeyCode::F2,
-            CT::F(3) => KeyCode::F3,
-            CT::F(4) => KeyCode::F4,
-            CT::F(5) => KeyCode::F5,
-            CT::F(6) => KeyCode::F6,
-            CT::F(7) => KeyCode::F7,
-            CT::F(8) => KeyCode::F8,
-            CT::F(9) => KeyCode::F9,
-            CT::F(10) => KeyCode::F10,
-            CT::F(11) => KeyCode::F11,
-            CT::F(12) => KeyCode::F12,
-            CT::Char(' ') | CT::Null => KeyCode::Space,
-            CT::Enter => KeyCode::Return,
-            CT::Esc => KeyCode::Escape,
-            CT::Backspace => KeyCode::Backspace,
-            CT::Tab => KeyCode::Tab,
-            CT::Left => KeyCode::LeftArrow,
-            CT::Right => KeyCode::RightArrow,
-            CT::Up => KeyCode::UpArrow,
-            CT::Down => KeyCode::DownArrow,
-            CT::Char(c) => KeyCode::Other(c as u32),
-            _ => KeyCode::Other(0),
-        }
-    }
-
-    #[cfg(target_arch = "wasm32")]
-    use std::cell::RefCell;
-
-    #[cfg(target_arch = "wasm32")]
-    thread_local! {
-        static KEY_QUEUE: RefCell<std::collections::VecDeque<(KeyCode, KeyState)>> =
-            RefCell::new(std::collections::VecDeque::new());
-    }
-
-    #[cfg(target_arch = "wasm32")]
-    pub fn push_key_event(code: KeyCode, state: KeyState) {
-        KEY_QUEUE.with(|q| q.borrow_mut().push_back((code, state)));
-    }
-
-    #[cfg(target_arch = "wasm32")]
-    pub fn poll_key_event() -> Option<(KeyCode, KeyState)> {
-        KEY_QUEUE.with(|q| q.borrow_mut().pop_front())
-    }
-
-    #[cfg(target_arch = "wasm32")]
-    pub fn flush_key_buffer() {
-        KEY_QUEUE.with(|q| q.borrow_mut().clear());
+    if let Ok(mut q) = KEY_QUEUE.lock() {
+        q.clear();
     }
 }

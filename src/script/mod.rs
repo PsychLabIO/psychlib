@@ -1,16 +1,17 @@
+use crate::clock::Clock;
+use crate::data::{CsvWriter, DataStore, SessionHeader};
+use crate::error::Error;
+use crate::renderer::RenderCommand;
+use mlua::prelude::*;
+use std::path::Path;
+use std::sync::{Arc, Mutex};
+use tracing::info;
+
 pub mod api_clock;
 pub mod api_data;
 pub mod api_rand;
 pub mod api_stim;
 pub mod api_trial;
-
-use crate::clock::Clock;
-use crate::data::{CsvWriter, DataStore, SessionHeader};
-use crate::error::Error;
-use mlua::prelude::*;
-use std::path::Path;
-use std::sync::{Arc, Mutex};
-use tracing::info;
 
 #[derive(Clone)]
 pub(crate) struct HostState {
@@ -59,7 +60,6 @@ impl ScriptHost {
         globals.set("Data", api_data::make_data_table(&lua, &state)?)?;
         globals.set("Rand", api_rand::make_rand_table(&lua, seed)?)?;
         globals.set("Stim", api_stim::make_stim_table(&lua)?)?;
-
         globals.set("psychlib_VERSION", env!("CARGO_PKG_VERSION"))?;
 
         drop(globals);
@@ -95,7 +95,27 @@ impl ScriptHost {
         &self.lua
     }
 
+    pub fn attach_renderer(&self, handle: crate::renderer::RenderHandle) {
+        *self
+            .state
+            .render_handle
+            .lock()
+            .expect("render_handle mutex poisoned") = Some(handle);
+    }
+
     pub fn close(self) -> Result<(), Error> {
+        {
+            let guard = self
+                .state
+                .render_handle
+                .lock()
+                .expect("render_handle mutex poisoned");
+
+            if let Some(handle) = guard.as_ref() {
+                let _ = handle.send(RenderCommand::Quit);
+            }
+        }
+
         let mut store = self
             .state
             .data_store
@@ -110,15 +130,5 @@ impl ScriptHost {
 
         info!("ScriptHost closed");
         Ok(())
-    }
-}
-
-impl ScriptHost {
-    pub fn attach_renderer(&self, handle: crate::renderer::RenderHandle) {
-        *self
-            .state
-            .render_handle
-            .lock()
-            .expect("render_handle mutex poisoned") = Some(handle);
     }
 }

@@ -189,7 +189,7 @@ fn cmd_info() -> Result<()> {
     );
     println!();
 
-    println!("Timing self-test (20 × 10 ms sleeps)…");
+    println!("Timing self-test (20 x 10 ms sleeps)");
     let errors = timing_selftest(&clock);
     let mean_us = errors.iter().sum::<i64>() / errors.len() as i64;
     let max_us = errors.iter().copied().max().unwrap_or(0);

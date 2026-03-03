@@ -9,6 +9,11 @@ pub use stimulus::{Color, Rect, Stimulus, TextOptions};
 
 use crate::clock::FrameTimestamp;
 use std::sync::mpsc;
+use winit::event_loop::EventLoopProxy;
+
+/// Sent through the winit proxy to wake the event loop when a render command is queued.
+#[derive(Debug)]
+pub struct WakeUp;
 
 #[derive(Debug)]
 pub enum RenderCommand {
@@ -33,13 +38,16 @@ pub enum RenderEvent {
 pub struct RenderHandle {
     pub cmd_tx: mpsc::SyncSender<RenderCommand>,
     pub event_rx: mpsc::Receiver<RenderEvent>,
+    pub proxy: EventLoopProxy<WakeUp>,
 }
 
 impl RenderHandle {
     pub fn send(&self, cmd: RenderCommand) -> Result<(), String> {
         self.cmd_tx
             .send(cmd)
-            .map_err(|e| format!("render channel closed: {e}"))
+            .map_err(|e| format!("render channel closed: {e}"))?;
+        let _ = self.proxy.send_event(WakeUp);
+        Ok(())
     }
 
     pub fn recv(&self) -> Result<RenderEvent, String> {
@@ -64,7 +72,6 @@ impl RenderHandle {
                 }
                 RenderEvent::WindowClosed => return Err("window closed".into()),
                 RenderEvent::Error(e) => return Err(e),
-                // Keep waiting through unrelated frame flips.
                 RenderEvent::FrameFlipped(_) => continue,
             }
         }
@@ -78,7 +85,6 @@ impl RenderHandle {
                 RenderEvent::FrameFlipped(ts) => return Ok(ts.instant),
                 RenderEvent::WindowClosed => return Err("window closed".into()),
                 RenderEvent::Error(e) => return Err(e),
-                // Don't treat image events as flips — keep waiting.
                 RenderEvent::ImageLoaded(_) | RenderEvent::ImageLoadFailed(_) => continue,
             }
         }

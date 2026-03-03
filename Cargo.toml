@@ -17,7 +17,7 @@ path = "src/main.rs"
 [features]
 default = ["native"]
 
-native = ["spin_sleep", "tokio/full", "crossterm"]
+native = ["spin_sleep", "tokio/full"]
 
 wasm = ["wasm-bindgen", "web-sys", "js-sys", "console_error_panic_hook"]
 
@@ -41,8 +41,6 @@ clap = { version = "4.5.60", features = ["derive", "env"] }
 
 thiserror = "2.0.18"
 anyhow = "1.0.102"
-
-crossterm = { version = "0.29", optional = true }
 
 winit = { version = "0.30.12", features = ["rwh_06"] }
 wgpu = { version = "28", features = ["wgsl"] }

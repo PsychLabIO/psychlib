@@ -16,17 +16,17 @@ pub struct ExperimentConfig {
 
 /// Run one experiment session end-to-end.
 /// Blocks until the script completes or the window is closed.
-/// Must be called from the **main thread**.
+/// Must be called from the main thread!
 pub fn run(config: ExperimentConfig) -> anyhow::Result<()> {
     let clock = Clock::new();
     let clock_info = clock.info();
 
     info!("psychlib v{}", env!("CARGO_PKG_VERSION"));
-    info!("participant : {}", config.participant);
-    info!("script      : {}", config.script_path.display());
-    info!("output      : {}", config.output_dir.display());
+    info!("participant: {}", config.participant);
+    info!("script: {}", config.script_path.display());
+    info!("output: {}", config.output_dir.display());
     info!(
-        "seed        : {}",
+        "seed: {}",
         config.seed.map_or("entropy".into(), |s| s.to_string())
     );
     info!(
@@ -68,14 +68,15 @@ pub fn run(config: ExperimentConfig) -> anyhow::Result<()> {
 
             host.attach_renderer(render_handle);
 
-            host.run_file(&script_path)
-                .map_err(|e| anyhow::anyhow!("Script error: {e}"))?;
+            let script_result = host
+                .run_file(&script_path)
+                .map_err(|e| anyhow::anyhow!("Script error: {e}"));
 
-            host.close()
-                .map_err(|e| anyhow::anyhow!("Data flush error: {e}"))?;
+            let close_result = host
+                .close()
+                .map_err(|e| anyhow::anyhow!("Data flush error: {e}"));
 
-            info!("Script thread finished");
-            Ok(())
+            script_result.and(close_result)
         })
         .map_err(|e| anyhow::anyhow!("Failed to spawn script thread: {e}"))?;
 
@@ -100,16 +101,14 @@ pub fn run(config: ExperimentConfig) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Run a script without a window
-/// No renderer is created; `Trial.show()` falls back to clock-sleep stubs.
-/// All data recording works normally.
+/// Run a script without a window.
 pub fn headless_run(config: ExperimentConfig) -> anyhow::Result<()> {
     let clock = Clock::new();
     let clock_info = clock.info();
 
     info!("psychlib headless run");
-    info!("participant : {}", config.participant);
-    info!("script      : {}", config.script_path.display());
+    info!("participant: {}", config.participant);
+    info!("script: {}", config.script_path.display());
 
     let script_stem = config
         .script_path
@@ -132,11 +131,15 @@ pub fn headless_run(config: ExperimentConfig) -> anyhow::Result<()> {
     let host = ScriptHost::new(clock, &config.output_dir, header, config.seed)
         .map_err(|e| anyhow::anyhow!("ScriptHost init: {e}"))?;
 
-    host.run_file(&config.script_path)
-        .map_err(|e| anyhow::anyhow!("Script error: {e}"))?;
+    let script_result = host
+        .run_file(&config.script_path)
+        .map_err(|e| anyhow::anyhow!("Script error: {e}"));
 
-    host.close()
-        .map_err(|e| anyhow::anyhow!("Data flush error: {e}"))?;
+    let close_result = host
+        .close()
+        .map_err(|e| anyhow::anyhow!("Data flush error: {e}"));
+
+    script_result.and(close_result)?;
 
     info!("Headless session complete ✓");
     Ok(())

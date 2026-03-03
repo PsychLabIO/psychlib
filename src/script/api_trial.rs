@@ -1,20 +1,32 @@
 use super::HostState;
 use crate::clock::Duration;
+use crate::clock::Instant;
 use crate::io::{
     keyboard::KeyCode,
     response::{ResponseOutcome, ResponseWindow},
 };
 use mlua::prelude::*;
 
+/// Insert a clock `Instant` into Lua table with multiple precision fields.
+/// Returns `{ ms, ns, secs }`
+fn instant_to_lua(lua: &Lua, instant: Instant) -> LuaResult<LuaTable> {
+    let tbl = lua.create_table()?;
+    tbl.set("ns", instant.as_nanos())?;
+    tbl.set("ms", instant.as_millis())?;
+    tbl.set("secs", instant.as_secs_f64())?;
+    Ok(tbl)
+}
+
 pub(crate) fn make_trial_table(lua: &Lua, state: &HostState) -> LuaResult<LuaTable> {
     let t = lua.create_table()?;
+
     {
         let clock = state.clock.clone();
         let render_handle = state.render_handle.clone();
 
         t.set(
             "show",
-            lua.create_function(move |_, (stim_val, ms): (LuaValue, Option<f64>)| {
+            lua.create_function(move |lua_ctx, (stim_val, ms): (LuaValue, Option<f64>)| {
                 let stim_tbl = match stim_val {
                     LuaValue::Table(tbl) => tbl,
                     other => {
@@ -43,7 +55,7 @@ pub(crate) fn make_trial_table(lua: &Lua, state: &HostState) -> LuaResult<LuaTab
                                     clock.sleep(Duration::from_secs(ms / 1000.0));
                                 }
                             }
-                            return Ok(());
+                            return Ok(LuaValue::Nil);
                         }
                     }
                 };
@@ -55,7 +67,7 @@ pub(crate) fn make_trial_table(lua: &Lua, state: &HostState) -> LuaResult<LuaTab
                     }
                 }
 
-                Ok(())
+                Ok(LuaValue::Table(instant_to_lua(&lua_ctx, flip_instant)?))
             })?,
         )?;
     }
@@ -66,7 +78,7 @@ pub(crate) fn make_trial_table(lua: &Lua, state: &HostState) -> LuaResult<LuaTab
 
         t.set(
             "blank",
-            lua.create_function(move |_, ms: Option<f64>| {
+            lua.create_function(move |lua_ctx, ms: Option<f64>| {
                 let flip_instant = {
                     let guard = render_handle
                         .lock()
@@ -83,7 +95,7 @@ pub(crate) fn make_trial_table(lua: &Lua, state: &HostState) -> LuaResult<LuaTab
                                     clock.sleep(Duration::from_secs(ms / 1000.0));
                                 }
                             }
-                            return Ok(());
+                            return Ok(LuaValue::Nil);
                         }
                     }
                 };
@@ -95,7 +107,7 @@ pub(crate) fn make_trial_table(lua: &Lua, state: &HostState) -> LuaResult<LuaTab
                     }
                 }
 
-                Ok(())
+                Ok(LuaValue::Table(instant_to_lua(&lua_ctx, flip_instant)?))
             })?,
         )?;
     }

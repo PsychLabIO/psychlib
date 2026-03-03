@@ -1,6 +1,6 @@
 use crate::clock::Clock;
 use crate::renderer::{
-    RenderCommand, RenderEvent, RenderHandle,
+    RenderCommand, RenderEvent, RenderHandle, WakeUp,
     context::WgpuContext,
     pipeline::{ColorPipeline, DrawImageOutcome, TexturePipeline},
     stimulus::{Color, Stimulus},
@@ -47,17 +47,22 @@ pub struct RenderLoop {
     texture_pipeline: Option<TexturePipeline>,
     text_renderer: Option<TextRenderer>,
     current: Option<Stimulus>,
+    dirty: bool,
 }
 
 impl RenderLoop {
-    pub fn create(config: RenderConfig, clock: Clock) -> (RenderHandle, EventLoop<()>, Self) {
+    pub fn create(config: RenderConfig, clock: Clock) -> (RenderHandle, EventLoop<WakeUp>, Self) {
         let (cmd_tx, cmd_rx) = mpsc::sync_channel(8);
         let (event_tx, event_rx) = mpsc::sync_channel(8);
 
-        let handle = RenderHandle { cmd_tx, event_rx };
+        let event_loop = EventLoop::<WakeUp>::with_user_event()
+            .build()
+            .expect("Failed to create EventLoop");
+        event_loop.set_control_flow(ControlFlow::Wait);
 
-        let event_loop = EventLoop::new().expect("Failed to create EventLoop");
-        event_loop.set_control_flow(ControlFlow::Poll);
+        let proxy = event_loop.create_proxy();
+
+        let handle = RenderHandle { cmd_tx, event_rx, proxy };
 
         let rl = Self {
             config,
@@ -70,6 +75,7 @@ impl RenderLoop {
             texture_pipeline: None,
             text_renderer: None,
             current: None,
+            dirty: false,
         };
         (handle, event_loop, rl)
     }
@@ -180,39 +186,15 @@ impl RenderLoop {
         match stim {
             Stimulus::Rect { rect, color } => {
                 pipeline.draw_quad(
-                    pass,
-                    queue,
-                    rect.cx,
-                    rect.cy,
-                    rect.hw,
-                    rect.hh,
+                    pass, queue,
+                    rect.cx, rect.cy, rect.hw, rect.hh,
                     color.to_array(),
                 );
             }
 
-            Stimulus::Fixation {
-                color,
-                arm_len,
-                thickness,
-            } => {
-                pipeline.draw_quad(
-                    pass,
-                    queue,
-                    0.0,
-                    0.0,
-                    *arm_len,
-                    *thickness,
-                    color.to_array(),
-                );
-                pipeline.draw_quad(
-                    pass,
-                    queue,
-                    0.0,
-                    0.0,
-                    *thickness,
-                    *arm_len,
-                    color.to_array(),
-                );
+            Stimulus::Fixation { color, arm_len, thickness } => {
+                pipeline.draw_quad(pass, queue, 0.0, 0.0, *arm_len, *thickness, color.to_array());
+                pipeline.draw_quad(pass, queue, 0.0, 0.0, *thickness, *arm_len, color.to_array());
             }
 
             Stimulus::Text { content, opts, pos } => {
@@ -223,24 +205,10 @@ impl RenderLoop {
 
             Stimulus::Image { path, rect, tint } => {
                 let outcome = if let Some(tp) = self.texture_pipeline.as_mut() {
-                    tp.draw_image(
-                        pass,
-                        queue,
-                        path,
-                        rect.cx,
-                        rect.cy,
-                        rect.hw,
-                        rect.hh,
-                        tint.to_array(),
-                    )
+                    tp.draw_image(pass, queue, path, rect.cx, rect.cy, rect.hw, rect.hh, tint.to_array())
                 } else {
                     warn!("Image stimulus: texture pipeline not initialised");
-                    DrawImageOutcome::Fallback {
-                        cx: rect.cx,
-                        cy: rect.cy,
-                        hw: rect.hw,
-                        hh: rect.hh,
-                    }
+                    DrawImageOutcome::Fallback { cx: rect.cx, cy: rect.cy, hw: rect.hw, hh: rect.hh }
                 };
 
                 if let DrawImageOutcome::Fallback { cx, cy, hw, hh } = outcome {
@@ -258,7 +226,7 @@ impl RenderLoop {
     }
 }
 
-impl ApplicationHandler for RenderLoop {
+impl ApplicationHandler<WakeUp> for RenderLoop {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let mut attrs = Window::default_attributes()
             .with_title(&self.config.title)
@@ -292,10 +260,7 @@ impl ApplicationHandler for RenderLoop {
             ctx.size.height,
         );
 
-        info!(
-            "Render window ready: {}x{}",
-            ctx.size.width, ctx.size.height
-        );
+        info!("Render window ready: {}x{}", ctx.size.width, ctx.size.height);
 
         self.window = Some(window);
         self.ctx = Some(ctx);
@@ -304,8 +269,27 @@ impl ApplicationHandler for RenderLoop {
         self.text_renderer = Some(text_renderer);
     }
 
+    fn user_event(&mut self, _: &ActiveEventLoop, _: WakeUp) {
+        if let Some(w) = &self.window {
+            w.request_redraw();
+        }
+    }
+
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
+            WindowEvent::KeyboardInput { event, .. } => {
+                use winit::event::ElementState;
+                use crate::io::keyboard::{KeyState, push_key_event};
+
+                if let Some(code) = crate::io::keyboard::KeyCode::from_winit(&event.logical_key) {
+                    let state = match event.state {
+                        ElementState::Pressed => KeyState::Pressed,
+                        ElementState::Released => KeyState::Released,
+                    };
+                    push_key_event(code, state);
+                }
+            }
+
             WindowEvent::CloseRequested => {
                 info!("Window close requested");
                 let _ = self.event_tx.try_send(RenderEvent::WindowClosed);
@@ -317,25 +301,32 @@ impl ApplicationHandler for RenderLoop {
                     if let Some(ctx) = self.ctx.as_mut() {
                         ctx.resize(size.width, size.height);
                     }
-                    if let (Some(ctx), Some(tr)) = (self.ctx.as_ref(), self.text_renderer.as_mut())
-                    {
+                    if let (Some(ctx), Some(tr)) = (self.ctx.as_ref(), self.text_renderer.as_mut()) {
                         tr.resize(&ctx.queue, size.width, size.height);
                     }
                 }
             }
 
             WindowEvent::RedrawRequested => {
+                let mut needs_redraw = false;
+
                 loop {
                     match self.cmd_rx.try_recv() {
                         Ok(RenderCommand::Show(stim)) => {
                             self.current = Some(stim);
+                            self.dirty = true;
+                            needs_redraw = true;
                         }
                         Ok(RenderCommand::Clear) => {
                             self.current = None;
+                            self.dirty = true;
+                            needs_redraw = true;
                         }
                         Ok(RenderCommand::ClearColor(c)) => {
                             self.current = None;
                             self.config.background = c;
+                            self.dirty = true;
+                            needs_redraw = true;
                         }
                         Ok(RenderCommand::PreloadImage(path)) => {
                             self.preload_image(path);
@@ -352,24 +343,19 @@ impl ApplicationHandler for RenderLoop {
                     }
                 }
 
-                let stim = self
-                    .current
-                    .clone()
-                    .unwrap_or_else(|| Stimulus::blank(self.config.background));
+                if needs_redraw || self.dirty {
+                    let stim = self
+                        .current
+                        .clone()
+                        .unwrap_or_else(|| Stimulus::blank(self.config.background));
 
-                self.render(&stim);
-
-                if let Some(w) = &self.window {
-                    w.request_redraw();
+                    self.render(&stim);
+                    self.dirty = false;
                 }
             }
             _ => {}
         }
     }
 
-    fn about_to_wait(&mut self, _: &ActiveEventLoop) {
-        if let Some(w) = &self.window {
-            w.request_redraw();
-        }
-    }
+    fn about_to_wait(&mut self, _: &ActiveEventLoop) {/* no op */}
 }
