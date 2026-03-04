@@ -214,7 +214,7 @@ pub fn parse_color_str(s: &str) -> Option<Color> {
         "gray" | "grey" => Color::GRAY,
         "yellow" => Color::new(1.0, 1.0, 0.0, 1.0),
         "cyan" | "aqua" => Color::new(0.0, 1.0, 1.0, 1.0),
-        "magenta" | "fuchsia" => Color::new(1.0, 0.0, 1.0, 1.0),
+        "magenta" => Color::new(1.0, 0.0, 1.0, 1.0),
         "orange" => Color::new(1.0, 0.647, 0.0, 1.0),
         "purple" => Color::new(0.502, 0.0, 0.502, 1.0),
         "transparent" => Color::new(0.0, 0.0, 0.0, 0.0),
