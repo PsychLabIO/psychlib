@@ -74,8 +74,7 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
 
 pub struct ColorPipeline {
     pipeline: wgpu::RenderPipeline,
-    uniform_buf: wgpu::Buffer,
-    bind_group: wgpu::BindGroup,
+    bgl: wgpu::BindGroupLayout,
     vertex_buf: wgpu::Buffer,
     index_buf: wgpu::Buffer,
 }
@@ -85,13 +84,6 @@ impl ColorPipeline {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("color_shader"),
             source: wgpu::ShaderSource::Wgsl(COLOR_SHADER.into()),
-        });
-
-        let uniform_buf = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("uniform_buffer"),
-            size: std::mem::size_of::<ColorUniforms>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
         });
 
         let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -105,15 +97,6 @@ impl ColorPipeline {
                     min_binding_size: None,
                 },
                 count: None,
-            }],
-        });
-
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("color_bind_group"),
-            layout: &bgl,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: uniform_buf.as_entire_binding(),
             }],
         });
 
@@ -166,8 +149,7 @@ impl ColorPipeline {
 
         Self {
             pipeline,
-            uniform_buf,
-            bind_group,
+            bgl,
             vertex_buf,
             index_buf,
         }
@@ -176,7 +158,7 @@ impl ColorPipeline {
     pub fn draw_quad(
         &self,
         pass: &mut wgpu::RenderPass,
-        queue: &wgpu::Queue,
+        device: &wgpu::Device,
         cx: f32,
         cy: f32,
         hw: f32,
@@ -188,10 +170,23 @@ impl ColorPipeline {
             color,
         };
 
-        queue.write_buffer(&self.uniform_buf, 0, bytemuck::bytes_of(&uniforms));
+        let buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents: bytemuck::bytes_of(&uniforms),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &self.bgl,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: buf.as_entire_binding(),
+            }],
+        });
 
         pass.set_pipeline(&self.pipeline);
-        pass.set_bind_group(0, &self.bind_group, &[]);
+        pass.set_bind_group(0, &bind_group, &[]);
         pass.set_vertex_buffer(0, self.vertex_buf.slice(..));
         pass.set_index_buffer(self.index_buf.slice(..), wgpu::IndexFormat::Uint16);
         pass.draw_indexed(0..6, 0, 0..1);
@@ -259,7 +254,6 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
 pub struct TexturePipeline {
     pipeline: wgpu::RenderPipeline,
     texture_bgl: wgpu::BindGroupLayout,
-    tint_bgl: wgpu::BindGroupLayout,
     vertex_buf: wgpu::Buffer,
     tint_buf: wgpu::Buffer,
     tint_bg: wgpu::BindGroup,
@@ -372,7 +366,6 @@ impl TexturePipeline {
         Self {
             pipeline,
             texture_bgl,
-            tint_bgl,
             vertex_buf,
             tint_buf,
             tint_bg,

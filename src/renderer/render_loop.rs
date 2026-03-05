@@ -62,7 +62,11 @@ impl RenderLoop {
 
         let proxy = event_loop.create_proxy();
 
-        let handle = RenderHandle { cmd_tx, event_rx, proxy };
+        let handle = RenderHandle {
+            cmd_tx,
+            event_rx,
+            proxy,
+        };
 
         let rl = Self {
             config,
@@ -186,15 +190,46 @@ impl RenderLoop {
         match stim {
             Stimulus::Rect { rect, color } => {
                 pipeline.draw_quad(
-                    pass, queue,
-                    rect.cx, rect.cy, rect.hw, rect.hh,
+                    pass,
+                    device,
+                    rect.cx,
+                    rect.cy,
+                    rect.hw,
+                    rect.hh,
                     color.to_array(),
                 );
             }
 
-            Stimulus::Fixation { color, arm_len, thickness } => {
-                pipeline.draw_quad(pass, queue, 0.0, 0.0, *arm_len, *thickness, color.to_array());
-                pipeline.draw_quad(pass, queue, 0.0, 0.0, *thickness, *arm_len, color.to_array());
+            Stimulus::Fixation {
+                color,
+                arm_len,
+                thickness,
+            } => {
+                let aspect = self
+                    .ctx
+                    .as_ref()
+                    .map(|ctx| ctx.size.width as f32 / ctx.size.height as f32)
+                    .unwrap_or(1.0);
+                
+                pipeline.draw_quad(
+                    pass,
+                    device,
+                    0.0,
+                    0.0,
+                    *arm_len,
+                    *thickness * aspect,
+                    color.to_array(),
+                );
+
+                pipeline.draw_quad(
+                    pass,
+                    device,
+                    0.0,
+                    0.0,
+                    *thickness * aspect,
+                    *arm_len,
+                    color.to_array(),
+                );
             }
 
             Stimulus::Text { content, opts, pos } => {
@@ -205,14 +240,28 @@ impl RenderLoop {
 
             Stimulus::Image { path, rect, tint } => {
                 let outcome = if let Some(tp) = self.texture_pipeline.as_mut() {
-                    tp.draw_image(pass, queue, path, rect.cx, rect.cy, rect.hw, rect.hh, tint.to_array())
+                    tp.draw_image(
+                        pass,
+                        queue,
+                        path,
+                        rect.cx,
+                        rect.cy,
+                        rect.hw,
+                        rect.hh,
+                        tint.to_array(),
+                    )
                 } else {
                     warn!("Image stimulus: texture pipeline not initialised");
-                    DrawImageOutcome::Fallback { cx: rect.cx, cy: rect.cy, hw: rect.hw, hh: rect.hh }
+                    DrawImageOutcome::Fallback {
+                        cx: rect.cx,
+                        cy: rect.cy,
+                        hw: rect.hw,
+                        hh: rect.hh,
+                    }
                 };
 
                 if let DrawImageOutcome::Fallback { cx, cy, hw, hh } = outcome {
-                    pipeline.draw_quad(pass, queue, cx, cy, hw, hh, Color::MAGENTA.to_array());
+                    pipeline.draw_quad(pass, device, cx, cy, hw, hh, Color::MAGENTA.to_array());
                 }
             }
 
@@ -260,7 +309,10 @@ impl ApplicationHandler<WakeUp> for RenderLoop {
             ctx.size.height,
         );
 
-        info!("Render window ready: {}x{}", ctx.size.width, ctx.size.height);
+        info!(
+            "Render window ready: {}x{}",
+            ctx.size.width, ctx.size.height
+        );
 
         self.window = Some(window);
         self.ctx = Some(ctx);
@@ -278,8 +330,8 @@ impl ApplicationHandler<WakeUp> for RenderLoop {
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::KeyboardInput { event, .. } => {
-                use winit::event::ElementState;
                 use crate::io::keyboard::{KeyState, push_key_event};
+                use winit::event::ElementState;
 
                 if let Some(code) = crate::io::keyboard::KeyCode::from_winit(&event.logical_key) {
                     let state = match event.state {
@@ -301,7 +353,8 @@ impl ApplicationHandler<WakeUp> for RenderLoop {
                     if let Some(ctx) = self.ctx.as_mut() {
                         ctx.resize(size.width, size.height);
                     }
-                    if let (Some(ctx), Some(tr)) = (self.ctx.as_ref(), self.text_renderer.as_mut()) {
+                    if let (Some(ctx), Some(tr)) = (self.ctx.as_ref(), self.text_renderer.as_mut())
+                    {
                         tr.resize(&ctx.queue, size.width, size.height);
                     }
                 }
@@ -357,5 +410,6 @@ impl ApplicationHandler<WakeUp> for RenderLoop {
         }
     }
 
-    fn about_to_wait(&mut self, _: &ActiveEventLoop) {/* no op */}
+    fn about_to_wait(&mut self, _: &ActiveEventLoop) { /* no op */
+    }
 }
