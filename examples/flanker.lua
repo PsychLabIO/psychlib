@@ -3,13 +3,12 @@
 local N_BLOCKS = 2
 local TRIALS_PER_CELL = 5
 local FIXATION_MS = 500
-local STIMULUS_MS = 500
 local RESPONSE_MS = 1500
 local ITI_MS = 800
 
 local RESPONSE_KEYS = { "left", "right" }
 
-local fix = Stim.fixation({ color = "white", arm_len = 0.02, thickness = 0.004 })
+local fix = Stim.fixation({ color = "white", arm_len = 0.05, thickness = 0.003 })
 
 local function make_arrows(direction, congruent)
     local centre = direction == "left" and "<" or ">"
@@ -74,15 +73,11 @@ local function run_trial(trial)
 
     Trial.show(fix, FIXATION_MS)
 
-    local onset = Trial.show(stim)
-
+    Trial.show(stim)
     local resp = Trial.wait_key({
-        keys    = RESPONSE_KEYS,
+        keys = RESPONSE_KEYS,
         timeout = RESPONSE_MS,
-        onset   = onset,
     })
-
-    Trial.blank()
 
     Trial.blank(ITI_MS)
 
@@ -91,9 +86,9 @@ local function run_trial(trial)
 
     return {
         correct = correct,
-        rt_ms = resp and resp.rt_ms or nil,
+        response_rt_ms = resp and resp.rt_ms or nil,
         responded = resp ~= nil,
-        key = resp and resp.key or nil,
+        response_key = resp and resp.key or nil,
     }
 end
 
@@ -112,9 +107,9 @@ for block = 1, N_BLOCKS do
             direction = trial.direction,
             congruent = trial.congruent,
             correct = result.correct,
-            rt_ms = result.rt_ms,
+            response_rt_ms = result.response_rt_ms,
             responded = result.responded,
-            key = result.key,
+            response_key = result.response_key,
         })
 
         Trial.next()
