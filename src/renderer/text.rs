@@ -84,16 +84,26 @@ impl TextRenderer {
             (res_w * 0.5, res_h * 0.5)
         };
 
+        let mut line_count = 0usize;
+        for run in buffer.layout_runs() {
+            measured_width = measured_width.max(run.line_w);
+            line_count += 1;
+        }
+
+        let measured_height = line_count as f32 * line_height;
+
         let left = match opts.align.as_str() {
             "center" => x_px - measured_width * 0.5,
             "right" => x_px - measured_width,
             _ => x_px,
         };
 
+        let top = y_px - measured_height * 0.5;
+
         let text_area = TextArea {
             buffer: &buffer,
             left,
-            top: y_px,
+            top,
             scale: 1.0,
             bounds: TextBounds {
                 left: 0,
