@@ -45,8 +45,9 @@ end
 local function show_instructions()
     local msg = Stim.text(
         "Flanker Task\n\n" ..
-        "Press LEFT for < Press RIGHT for >\n" ..
-        "Respond to the CENTRE arrow only.\n\n" ..
+        "Respond to the CENTER arrow only.\n\n" ..
+        "When the center arrow is pointing left (<), Press the Left Arrow Key\n\n" ..
+        "When the center arrow is pointing right (>), Press the Right Arrow Key\n\n" ..
         "Press any key to begin.",
         { size = 0.04, color = "white", align = "center" }
     )
