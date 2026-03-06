@@ -1,4 +1,4 @@
-Trial.preload_image("stimuli/funkydude.jpg")
+Trial.preload_image("stimuli/cat.jpg")
 
 
 local instr = Stim.text("Images work!", {
@@ -7,7 +7,7 @@ local instr = Stim.text("Images work!", {
     y = 0.2
 })
 
-local img = Stim.image("stimuli/funkydude.jpg", { hw = 0.4, hh = 0.4 })
+local img = Stim.image("stimuli/cat.jpg", { hw = 0.4, hh = 0.6 })
 
 Trial.show(instr, 1500)
 Trial.show(img, 2000)

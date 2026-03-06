@@ -86,7 +86,7 @@ local function run_trial(trial)
 
     return {
         correct = correct,
-        response_rt_ms = resp and resp.rt_ms or nil,
+        response_rt_ms = resp and resp.rt_ms,
         responded = resp ~= nil,
         response_key = resp and resp.key or nil,
     }
