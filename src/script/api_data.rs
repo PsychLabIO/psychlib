@@ -18,16 +18,25 @@ pub(crate) fn make_data_table(lua: &Lua, state: &HostState) -> LuaResult<LuaTabl
                 let trial_i = *state.trial_index.lock().expect("trial_index poisoned");
                 let block_i = *state.block_index.lock().expect("block_index poisoned");
 
-                let record = TrialRecord::new(
-                    trial_i,
-                    block_i,
-                    TrialPhase::Experiment,
-                    None,
-                    &[],
-                    custom,
-                    now,
-                    wall,
-                );
+                let custom_map = match custom {
+                    serde_json::Value::Object(map) => map,
+                    _ => serde_json::Map::new(),
+                };
+
+                let mut sorted_custom: Vec<(String, serde_json::Value)> =
+                    custom_map.into_iter().collect();
+                sorted_custom.sort_by(|(a, _), (b, _)| a.cmp(b));
+
+                let record = TrialRecord::builder()
+                    .field("trial_index", trial_i as u64)
+                    .field("block_index", block_i as u64)
+                    .field("phase", format!("{:?}", TrialPhase::Experiment).to_lowercase())
+                    .field(
+                        "recorded_at_wall",
+                        wall.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+                    )
+                    .merge(sorted_custom)
+                    .build();
 
                 debug!("Data.record: trial={} block={}", trial_i, block_i);
 

@@ -2218,6 +2218,7 @@ dependencies = [
  "console_error_panic_hook",
  "glyphon",
  "image",
+ "indexmap",
  "js-sys",
  "mlua",
  "pollster",

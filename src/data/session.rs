@@ -1,41 +1,20 @@
 use crate::clock::ClockInfo;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
-/// In CSV output this is serialized as a block of `#`-prefixed comment lines
-/// before the column headers, so standard CSV parsers can ignore it while
-/// psychlib tools can read it back.
-///
-/// In JSON output it appears as the `"session"` key at the root level.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionHeader {
-    /// Participant identifier as supplied via `--participant`.
     pub participant: String,
-
-    /// Name of the experiment script (stem only, no path or extension).
     pub script_name: String,
-
-    /// Full path to the script at time of execution.
     pub script_path: String,
-
     pub psychlib_version: String,
-
     pub started_at: DateTime<Utc>,
-
     pub ended_at: Option<DateTime<Utc>>,
-
-    /// Random seed used for trial ordering.
-    /// `None` if system entropy was used (not reproducible).
     pub seed: Option<u64>,
-
-    /// Clock metadata (platform, high-precision sleep, epoch).
     pub clock: ClockInfo,
-
-    /// Arbitrary key-value pairs for any study-specific metadata
-    /// (e.g. `{"lab": "cog-neurosci-b"}`).
     #[serde(default)]
-    pub extra: HashMap<String, String>,
+    pub extra: BTreeMap<String, String>,
 }
 
 impl SessionHeader {
@@ -55,7 +34,7 @@ impl SessionHeader {
             ended_at: None,
             seed,
             clock: clock_info,
-            extra: HashMap::new(),
+            extra: BTreeMap::new(),
         }
     }
 

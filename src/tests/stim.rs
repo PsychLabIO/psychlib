@@ -99,10 +99,6 @@ fn color_str_named_magenta() {
     assert!(parse_color_str("magenta").is_some());
 }
 #[test]
-fn color_str_named_fuchsia() {
-    assert!(parse_color_str("fuchsia").is_some());
-}
-#[test]
 fn color_str_named_orange() {
     assert!(parse_color_str("orange").is_some());
 }

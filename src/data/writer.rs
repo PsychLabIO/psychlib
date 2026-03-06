@@ -1,10 +1,9 @@
-use crate::data::record::TrialRecord;
+use crate::data::record::{value_to_csv_field, TrialRecord};
 use crate::data::session::SessionHeader;
 use anyhow::{Context, Result};
-use std::collections::BTreeSet;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 /// Generate a data filename from session metadata.
 /// Format: `<participant>_<script_stem>_<YYYYMMDD_HHMMSS>.<ext>`
@@ -37,7 +36,7 @@ pub struct CsvWriter {
     header: SessionHeader,
     writer: BufWriter<std::fs::File>,
     path: PathBuf,
-    custom_keys: Option<Vec<String>>,
+    columns: Option<Vec<String>>,
     trial_count: usize,
 }
 
@@ -60,7 +59,7 @@ impl CsvWriter {
             header,
             writer,
             path,
-            custom_keys: None,
+            columns: None,
             trial_count: 0,
         })
     }
@@ -69,58 +68,67 @@ impl CsvWriter {
         &self.path
     }
 
-    fn ensure_header(&mut self, record: &TrialRecord) -> Result<()> {
-        if self.custom_keys.is_some() {
+    fn ensure_columns(&mut self, record: &TrialRecord) -> Result<()> {
+        if self.columns.is_some() {
             return Ok(());
         }
 
-        let keys: Vec<String> = match &record.custom {
-            serde_json::Value::Object(map) => {
-                let mut keys: Vec<String> = map.keys().cloned().collect();
-                keys.sort();
-                keys
-            }
-            _ => Vec::new(),
-        };
+        let cols: Vec<String> = record.fields.keys().cloned().collect();
+        writeln!(self.writer, "{}", cols.join(","))
+            .context("Failed to write CSV column header")?;
 
-        let key_refs: Vec<&str> = keys.iter().map(String::as_str).collect();
-        let cols = TrialRecord::csv_column_names(&key_refs);
-        writeln!(self.writer, "{}", cols.join(",")).context("Failed to write CSV column header")?;
-
-        self.custom_keys = Some(keys);
+        self.columns = Some(cols);
         Ok(())
     }
 }
 
 impl DataStore for CsvWriter {
     fn write_trial(&mut self, record: &TrialRecord) -> Result<()> {
-        self.ensure_header(record)?;
+        self.ensure_columns(record)?;
 
-        let keys = self.custom_keys.as_ref().unwrap();
+        let columns = self.columns.as_ref().unwrap();
 
-        let record_custom_keys: BTreeSet<String> = match &record.custom {
-            serde_json::Value::Object(map) => map.keys().cloned().collect(),
-            _ => BTreeSet::new(),
-        };
-        let key_refs: Vec<&str> = keys.iter().map(String::as_str).collect();
-
-        for new_key in &record_custom_keys {
-            if !keys.contains(new_key) {
-                tracing::warn!(
-                    "Trial {} has new custom key '{}' not present in first trial — \
-                     this column will be misaligned in CSV",
-                    record.trial_index,
-                    new_key
+        for key in record.fields.keys() {
+            if !columns.contains(key) {
+                warn!(
+                    "Trial {} has field '{}' not present in first trial — \
+                     this value cannot be placed in a CSV column and will be dropped",
+                    record
+                        .fields
+                        .get("trial_index")
+                        .and_then(|v| v.as_u64())
+                        .map(|n| n.to_string())
+                        .unwrap_or_else(|| "?".to_string()),
+                    key
                 );
             }
         }
 
-        let row = record.to_csv_row(&key_refs);
+        let row: Vec<String> = columns
+            .iter()
+            .map(|col| {
+                record
+                    .fields
+                    .get(col)
+                    .map(value_to_csv_field)
+                    .unwrap_or_default()
+            })
+            .collect();
+
         writeln!(self.writer, "{}", escape_csv_row(&row))
             .context("Failed to write CSV trial row")?;
 
         self.trial_count += 1;
-        debug!("CSV: wrote trial {}", record.trial_index);
+        debug!(
+            "CSV: wrote trial {} ({})",
+            record
+                .fields
+                .get("trial_index")
+                .and_then(|v| v.as_u64())
+                .map(|n| n.to_string())
+                .unwrap_or_else(|| "?".to_string()),
+            self.path.display()
+        );
         Ok(())
     }
 
@@ -136,7 +144,6 @@ impl DataStore for CsvWriter {
     }
 }
 
-/// Escape a CSV row: quote any field containing a comma, newline, or quote.
 fn escape_csv_row(row: &[String]) -> String {
     row.iter()
         .map(|field| {
@@ -152,34 +159,21 @@ fn escape_csv_row(row: &[String]) -> String {
 
 pub struct JsonWriter {
     header: SessionHeader,
-    writer: BufWriter<std::fs::File>,
     path: PathBuf,
-    trial_count: usize,
+    trials: Vec<serde_json::Value>,
 }
 
 impl JsonWriter {
     pub fn create(output_dir: &Path, header: SessionHeader) -> Result<Self> {
-        let filename = data_filename(&header, "ndjson");
+        let filename = data_filename(&header, "json");
         let path = output_dir.join(&filename);
-
-        let file = std::fs::File::create(&path)
-            .with_context(|| format!("Failed to create JSON file: {}", path.display()))?;
-
-        let mut writer = BufWriter::new(file);
-
-        let mut header_val =
-            serde_json::to_value(&header).context("Failed to serialize session header")?;
-        header_val["type"] = serde_json::json!("session");
-        writeln!(writer, "{}", serde_json::to_string(&header_val)?)
-            .context("Failed to write JSON session header")?;
 
         info!("JSON writer opened: {}", path.display());
 
         Ok(Self {
             header,
-            writer,
             path,
-            trial_count: 0,
+            trials: Vec::new(),
         })
     }
 
@@ -190,24 +184,49 @@ impl JsonWriter {
 
 impl DataStore for JsonWriter {
     fn write_trial(&mut self, record: &TrialRecord) -> Result<()> {
-        let mut val = serde_json::to_value(record).context("Failed to serialize trial record")?;
-        val["type"] = serde_json::json!("trial");
+        let val = serde_json::to_value(&record.fields)
+            .context("Failed to serialize trial record")?;
 
-        writeln!(self.writer, "{}", serde_json::to_string(&val)?)
-            .context("Failed to write JSON trial row")?;
+        debug!(
+            "JSON: queued trial {} ({})",
+            record
+                .fields
+                .get("trial_index")
+                .and_then(|v| v.as_u64())
+                .map(|n| n.to_string())
+                .unwrap_or_else(|| "?".to_string()),
+            self.path.display()
+        );
 
-        self.trial_count += 1;
-        debug!("JSON: wrote trial {}", record.trial_index);
+        self.trials.push(val);
         Ok(())
     }
 
     fn close(mut self: Box<Self>) -> Result<()> {
         self.header.close();
-        self.writer.flush().context("Failed to flush JSON writer")?;
+
+        let header_val =
+            serde_json::to_value(&self.header).context("Failed to serialize session header")?;
+
+        let output = serde_json::json!({
+            "session": header_val,
+            "trials": self.trials,
+        });
+
+        let file = std::fs::File::create(&self.path)
+            .with_context(|| format!("Failed to create JSON file: {}", self.path.display()))?;
+
+        let mut writer = BufWriter::new(file);
+        serde_json::to_writer_pretty(&mut writer, &output)
+            .context("Failed to write JSON output")?;
+        writeln!(writer).context("Failed to write trailing newline")?;
+        writer.flush().context("Failed to flush JSON writer")?;
+
+        let trial_count = self.trials.len();
         info!(
             "JSON writer closed: {} ({} trials)",
             self.path.display(),
-            self.trial_count
+            trial_count
         );
         Ok(())
     }
