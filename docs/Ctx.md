@@ -1,4 +1,4 @@
-# Context (`ctx`)
+# Context
 
 `ctx` is a shared Lua table injected as a global before `experiment:run()` is called. Structure nodes write to it as the experiment progresses; display and data nodes read from it.
 
