@@ -1,5 +1,5 @@
 use crate::clock::Clock;
-use crate::data::{CsvWriter, DataStore, SessionHeader};
+use crate::data::{MultiWriter, OutputFormat, SessionHeader};
 use crate::error::Error;
 use crate::renderer::RenderCommand;
 use mlua::prelude::*;
@@ -13,13 +13,32 @@ pub mod api_rand;
 pub mod api_stim;
 pub mod api_trial;
 
+/// Stdlib source embedded at compile time so it is always in sync with the binary.
+const STDLIB: &str = include_str!("stdlib.lua");
+
 #[derive(Clone)]
 pub(crate) struct HostState {
     pub clock: Clock,
-    pub data_store: Arc<Mutex<Option<Box<dyn DataStore + Send>>>>,
-    pub trial_index: Arc<Mutex<usize>>,
-    pub block_index: Arc<Mutex<usize>>,
+    pub data_store: Arc<Mutex<Option<MultiWriter>>>,
+    #[allow(dead_code)]
+    pub output_dir: std::path::PathBuf,
+    #[allow(dead_code)]
+    pub header: SessionHeader,
     pub render_handle: Arc<Mutex<Option<crate::renderer::RenderHandle>>>,
+}
+
+impl HostState {
+    pub fn set_format(&self, format: &str) -> anyhow::Result<()> {
+        let fmt = OutputFormat::from_str(format)
+            .ok_or_else(|| anyhow::anyhow!(
+                "Unknown format {:?}. Use csv, json, or both.", format
+            ))?;
+        let mut store = self.data_store.lock().expect("data_store poisoned");
+        if let Some(ref mut mw) = *store {
+            mw.set_format(&fmt)?;
+        }
+        Ok(())
+    }
 }
 
 pub struct ScriptHost {
@@ -40,29 +59,34 @@ impl ScriptHost {
 
         std::fs::create_dir_all(output_dir).map_err(Error::Io)?;
 
-        let writer =
-            CsvWriter::create(output_dir, header).map_err(|e| Error::Clock(e.to_string()))?;
+        let multi =
+            MultiWriter::new(output_dir, header.clone())
+                .map_err(|e| Error::Clock(e.to_string()))?;
 
         let state = HostState {
             clock,
-            data_store: Arc::new(Mutex::new(Some(
-                Box::new(writer) as Box<dyn DataStore + Send>
-            ))),
-            trial_index: Arc::new(Mutex::new(0)),
-            block_index: Arc::new(Mutex::new(0)),
+            data_store: Arc::new(Mutex::new(Some(multi))),
+            output_dir: output_dir.to_path_buf(),
+            header,
             render_handle: Arc::new(Mutex::new(None)),
         };
 
         let globals = lua.globals();
 
+        api_trial::register(&lua, &state)?;
+        api_data::register(&lua, &state)?;
+
         globals.set("Clock", api_clock::make_clock_table(&lua, &state)?)?;
-        globals.set("Trial", api_trial::make_trial_table(&lua, &state)?)?;
-        globals.set("Data", api_data::make_data_table(&lua, &state)?)?;
         globals.set("Rand", api_rand::make_rand_table(&lua, seed)?)?;
         globals.set("Stim", api_stim::make_stim_table(&lua)?)?;
         globals.set("psychlib_VERSION", env!("CARGO_PKG_VERSION"))?;
 
         drop(globals);
+
+        lua.load(STDLIB)
+            .set_name("psychlib_stdlib")
+            .exec()
+            .map_err(Error::Script)?;
 
         info!("ScriptHost initialized (Luau sandbox enabled)");
 
@@ -123,9 +147,7 @@ impl ScriptHost {
             .expect("data store mutex poisoned");
 
         if let Some(writer) = store.take() {
-            Box::new(writer)
-                .close()
-                .map_err(|e| Error::Clock(e.to_string()))?;
+            writer.close().map_err(|e| Error::Clock(e.to_string()))?;
         }
 
         info!("ScriptHost closed");

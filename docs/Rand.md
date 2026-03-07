@@ -58,3 +58,13 @@ local trials = Rand.balanced_shuffle({"congruent", "incongruent", "neutral"}, 12
 ```
 
 If `items` is empty or `n` is 0, returns an empty table.
+
+---
+
+## See also
+
+The [`Shuffle(list)`](nodes.md#utility-functions) utility function in the stdlib is a thin wrapper around `Rand.shuffle` designed for use with `ForTrials`:
+
+```lua
+ForTrials(Shuffle(make_trials()), function(trial) ... end)
+```

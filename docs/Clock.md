@@ -13,8 +13,7 @@ High-resolution monotonic clock for timing experiment events.
 Returns the current time as a floating-point number of **milliseconds** since the experiment session started.
 
 ```lua
--- e.g. 1523.741
-local t = Clock.now_ms()
+local t = Clock.now_ms()  -- e.g. 1523.741
 ```
 
 ---
@@ -24,8 +23,7 @@ local t = Clock.now_ms()
 Returns the current time as a floating-point number of **seconds** since the experiment session started.
 
 ```lua
- -- e.g. 1.523741
-local t = Clock.now_secs()
+local t = Clock.now_secs()  -- e.g. 1.523741
 ```
 
 ---
@@ -35,8 +33,7 @@ local t = Clock.now_secs()
 Blocks the script for (at least) `ms` milliseconds. Values less than or equal to 0 are ignored.
 
 ```lua
--- pause for 500 ms
-Clock.sleep(500)
+Clock.sleep(500)  -- pause for 500 ms
 ```
 
-> **Note:** For stimulus-locked timing, prefer passing a duration directly to `Trial.show` or `Trial.blank`, which measure from the actual display flip rather than from the call site.
+> **Note:** For stimulus-locked timing, pass a `duration` directly to `Fixation`, `Stimulus`, or `Blank` nodes. They measure from the actual display flip rather than from the call site, giving more accurate inter-stimulus intervals.

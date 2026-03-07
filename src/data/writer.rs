@@ -26,10 +26,89 @@ fn sanitise(s: &str) -> String {
         .collect()
 }
 
+/// Output format selection, set via `experiment:set_format()` in the script.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OutputFormat {
+    Csv,
+    Json,
+    Both,
+}
+
+impl OutputFormat {
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "csv"  => Some(Self::Csv),
+            "json" => Some(Self::Json),
+            "both" => Some(Self::Both),
+            _      => None,
+        }
+    }
+}
+
 /// Common interface for all data writers.
 pub trait DataStore {
     fn write_trial(&mut self, record: &TrialRecord) -> Result<()>;
     fn close(self: Box<Self>) -> Result<()>;
+}
+
+pub struct MultiWriter {
+    writers: Vec<Box<dyn DataStore + Send>>,
+    output_dir: std::path::PathBuf,
+    header: SessionHeader,
+}
+
+impl MultiWriter {
+    /// Start with a single CSV writer. This is the default if the script
+    /// never calls `set_format`.
+    pub fn new(output_dir: &Path, header: SessionHeader) -> Result<Self> {
+        let w = CsvWriter::create(output_dir, header.clone())?;
+        Ok(Self {
+            writers: vec![Box::new(w)],
+            output_dir: output_dir.to_path_buf(),
+            header,
+        })
+    }
+
+    /// Replace the active writer set based on the requested format.
+    /// Must be called before the first trial is written.
+    pub fn set_format(&mut self, format: &OutputFormat) -> Result<()> {
+        self.writers.clear();
+        match format {
+            OutputFormat::Csv => {
+                self.writers.push(Box::new(
+                    CsvWriter::create(&self.output_dir, self.header.clone())?,
+                ));
+            }
+            OutputFormat::Json => {
+                self.writers.push(Box::new(
+                    JsonWriter::create(&self.output_dir, self.header.clone())?,
+                ));
+            }
+            OutputFormat::Both => {
+                self.writers.push(Box::new(
+                    CsvWriter::create(&self.output_dir, self.header.clone())?,
+                ));
+                self.writers.push(Box::new(
+                    JsonWriter::create(&self.output_dir, self.header.clone())?,
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    pub fn write_trial(&mut self, record: &TrialRecord) -> Result<()> {
+        for w in &mut self.writers {
+            w.write_trial(record)?;
+        }
+        Ok(())
+    }
+
+    pub fn close(self) -> Result<()> {
+        for w in self.writers {
+            w.close()?;
+        }
+        Ok(())
+    }
 }
 
 pub struct CsvWriter {
@@ -68,6 +147,7 @@ impl CsvWriter {
         &self.path
     }
 
+    /// Write column headers from the first record's field keys and lock them in.
     fn ensure_columns(&mut self, record: &TrialRecord) -> Result<()> {
         if self.columns.is_some() {
             return Ok(());
@@ -144,6 +224,7 @@ impl DataStore for CsvWriter {
     }
 }
 
+/// Quote any CSV field that contains a comma, double-quote, or newline.
 fn escape_csv_row(row: &[String]) -> String {
     row.iter()
         .map(|field| {

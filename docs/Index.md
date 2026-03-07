@@ -1,55 +1,94 @@
 # PsychLib Lua API
 
-This is the reference for the Lua scripting API exposed to experiment scripts by `psychlib`. All globals are injected automatically, meaning no `require` calls are needed.
+Reference for the Lua scripting API exposed to experiment scripts by `psychlib`. All globals are injected automatically; no `require` calls are needed.
+
+---
 
 ## Globals
 
 | Global | Description |
 |---|---|
 | [`Clock`](clock.md) | High-resolution monotonic clock |
-| [`Trial`](trial.md) | Stimulus display, response collection, trial/block counters |
-| [`Data`](data.md) | Trial-level data recording |
-| [`Rand`](rand.md) | Random number generation and balanced sequence utilities |
 | [`Stim`](stim.md) | Stimulus constructors and color helpers |
+| [`Rand`](rand.md) | Random number generation and balanced sequence utilities |
+| [`Ctx`](ctx.md) | Shared runtime context table|
 | `psychlib_VERSION` | Version string of the running psychlib build |
+
+---
+
+## Timeline nodes
+
+Experiments are built by composing nodes into a `Timeline`. Nodes are plain Lua tables with a `run()` method. They do nothing until the timeline executes them.
+
+| Node | Category | Description |
+|---|---|---|
+| [`Timeline()`](nodes.md#timeline) | Structure | Root container. Call `:run()` to execute. |
+| [`Sequence({ ... })`](nodes.md#sequence) | Structure | Run child nodes in order. |
+| [`ForBlocks(n, fn)`](nodes.md#forblocks) | Structure | Repeat `fn(block)` for `n` blocks. |
+| [`ForTrials(list, fn)`](nodes.md#fortrials) | Structure | Iterate a trial list, call `fn(trial)` per trial. |
+| [`If(pred, node, else?)`](nodes.md#if) | Flow | Conditionally run a node. |
+| [`Loop(pred, node)`](nodes.md#loop) | Flow | Run a node while a predicate holds. |
+| [`Instructions({ text, duration? })`](nodes.md#instructions) | Display | Show a text screen, wait for keypress or duration. |
+| [`Fixation({ duration })`](nodes.md#fixation) | Display | Show a fixation cross for a fixed duration. |
+| [`Stimulus({ stim, keys, timeout, ... })`](nodes.md#stimulus) | Display | Show a stimulus and collect a response. |
+| [`Blank({ duration })`](nodes.md#blank) | Display | Silent pause. |
+| [`Feedback({ correct_text, incorrect_text, duration })`](nodes.md#feedback) | Display | Show response feedback. |
+| [`EndScreen({ text, duration? })`](nodes.md#endscreen) | Display | Final screen at experiment end. |
+| [`Record({ ... })`](nodes.md#record) | Data | Write a trial row. |
+| [`Save()`](nodes.md#save) | Data | Flush and close the output file. |
 
 ---
 
 ## Coordinate system
 
-Screen positions use **normalised coordinates** where `(0, 0)` is the centre of the display. The value `1.0` reaches the edge of the screen along the shorter axis, so coordinates are consistent across different display resolutions.
+Screen positions use **normalised coordinates** where `(0, 0)` is the centre of the display. The value `1.0` reaches the edge of the screen along the shorter axis, so coordinates are consistent across different display resolutions and aspect ratios.
 
 ---
 
 ## Minimal experiment script
 
 ```lua
--- One-block, ten-trial reaction-time task
+-- Simple task
 
-Trial.set_block(1)
+local N_BLOCKS = 2
+local TRIALS_PER_CONDITION = 10
+local RESPONSE_KEYS = { "left", "right" }
 
-local conditions = Rand.balanced_shuffle({"left", "right"}, 10)
-
-for i = 1, #conditions do
-    local trial_n = Trial.next()
-    local cond = conditions[i]
-
-    Trial.show(Stim.fixation(), 500)
-    Trial.blank(Rand.float(400, 600))
-
-    local arrow = cond == "left" and "<-" or "->"
-    Trial.show(Stim.text(arrow, { size = 0.15 }))
-
-    local resp = Trial.wait_key({ keys = {"left", "right"}, timeout = 2000 })
-
-    Trial.blank(500)
-
-    Data.record({
-        trial = trial_n,
-        condition = cond,
-        response = resp and resp.key or "timeout",
-        rt_ms = resp and resp.rt_ms or nil,
-        correct = resp ~= nil and resp.key == cond,
-    })
+local function make_trials()
+    return Rand.balanced_shuffle({ "left", "right" }, TRIALS_PER_CONDITION * 2)
 end
+
+local experiment = Timeline()
+experiment:set_format("csv")
+
+experiment:add(Instructions({
+    text = "Press LEFT or RIGHT to match the arrow direction.\n\nPress any key to begin.",
+}))
+
+experiment:add(ForBlocks(N_BLOCKS, function(block)
+    return Sequence({
+        ForTrials(Shuffle(make_trials()), function(trial)
+            return Sequence({
+                Fixation({ duration = 500 }),
+                Stimulus({
+                    stim        = Stim.text(trial == "left" and "<" or ">",
+                                      { size = 0.12, color = "white", align = "center" }),
+                    keys        = RESPONSE_KEYS,
+                    timeout     = 2000,
+                    correct_key = trial,
+                }),
+                Blank({ duration = 600 }),
+                Record({ direction = trial }),
+            })
+        end),
+        If(function() return ctx.block < N_BLOCKS end,
+            Instructions({ text = "Short break.\n\nPress any key to continue." })
+        ),
+    })
+end))
+
+experiment:add(EndScreen({ text = "Done. Thank you!", duration = 2000 }))
+experiment:add(Save())
+
+experiment:run()
 ```

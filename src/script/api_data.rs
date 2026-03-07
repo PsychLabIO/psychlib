@@ -1,126 +1,127 @@
 use super::HostState;
 use crate::data::record::TrialRecord;
-use crate::scheduler::TrialPhase;
 use mlua::prelude::*;
 use tracing::{debug, info};
 
-pub(crate) fn make_data_table(lua: &Lua, state: &HostState) -> LuaResult<LuaTable> {
-    let t = lua.create_table()?;
-    {
-        let state = state.clone();
-        t.set(
-            "record",
-            lua.create_function(move |_, fields: LuaTable| {
-                let custom = lua_table_to_json(&fields)?;
-
-                let now = state.clock.now();
-                let wall = state.clock.to_wall_time(now);
-                let trial_i = *state.trial_index.lock().expect("trial_index poisoned");
-                let block_i = *state.block_index.lock().expect("block_index poisoned");
-
-                let custom_map = match custom {
-                    serde_json::Value::Object(map) => map,
-                    _ => serde_json::Map::new(),
-                };
-
-                let mut sorted_custom: Vec<(String, serde_json::Value)> =
-                    custom_map.into_iter().collect();
-                sorted_custom.sort_by(|(a, _), (b, _)| a.cmp(b));
-
-                let record = TrialRecord::builder()
-                    .field("trial_index", trial_i as u64)
-                    .field("block_index", block_i as u64)
-                    .field("phase", format!("{:?}", TrialPhase::Experiment).to_lowercase())
-                    .field(
-                        "recorded_at_wall",
-                        wall.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-                    )
-                    .merge(sorted_custom)
-                    .build();
-
-                debug!("Data.record: trial={} block={}", trial_i, block_i);
-
-                let mut store = state.data_store.lock().expect("data_store poisoned");
-                if let Some(ref mut writer) = *store {
-                    writer
-                        .write_trial(&record)
-                        .map_err(|e| LuaError::runtime(e.to_string()))?;
-                }
-
-                Ok(())
-            })?,
-        )?;
-    }
-
-    {
-        let data_store = state.data_store.clone();
-        t.set(
-            "save",
-            lua.create_function(move |_, ()| {
-                let mut store = data_store.lock().expect("data_store poisoned");
-                if let Some(writer) = store.take() {
-                    info!("Data.save() called from script");
-                    Box::new(writer)
-                        .close()
-                        .map_err(|e| LuaError::runtime(e.to_string()))?;
-                }
-                Ok(())
-            })?,
-        )?;
-    }
-
-    Ok(t)
+pub(crate) fn register(lua: &Lua, state: &HostState) -> LuaResult<()> {
+    inject_ctx(lua)?;
+    register_write_trial(lua, state)?;
+    register_save(lua, state)?;
+    register_set_format(lua, state)?;
+    Ok(())
 }
 
-/// Recursively convert a Luau table into a `serde_json::Value`.
-pub fn lua_table_to_json(tbl: &LuaTable) -> LuaResult<serde_json::Value> {
-    use serde_json::{Map, Value};
+fn inject_ctx(lua: &Lua) -> LuaResult<()> {
+    let ctx = lua.create_table()?;
+    lua.globals().set("ctx", ctx)?;
+    Ok(())
+}
 
-    let mut is_array = true;
-    let mut max_int = 0usize;
-    let mut has_str = false;
+fn register_write_trial(lua: &Lua, state: &HostState) -> LuaResult<()> {
+    let state = state.clone();
+    lua.globals().set(
+        "_psychlib_write_trial",
+        lua.create_function(move |_, fields: LuaTable| {
+            let row = lua_table_to_fields(&fields)?;
+            let record = TrialRecord::builder().merge(row).build();
+
+            debug!(
+                "_psychlib_write_trial: trial_index={:?}",
+                record
+                    .fields
+                    .get("trial_index")
+                    .and_then(|v| v.as_u64())
+                    .map(|n| n.to_string())
+                    .unwrap_or_else(|| "?".to_string())
+            );
+
+            let mut store = state.data_store.lock().expect("data_store poisoned");
+            if let Some(ref mut mw) = *store {
+                mw.write_trial(&record)
+                    .map_err(|e| LuaError::runtime(e.to_string()))?;
+            }
+            Ok(())
+        })?,
+    )?;
+    Ok(())
+}
+
+fn register_save(lua: &Lua, state: &HostState) -> LuaResult<()> {
+    let data_store = state.data_store.clone();
+    lua.globals().set(
+        "_psychlib_save",
+        lua.create_function(move |_, ()| {
+            let mut store = data_store.lock().expect("data_store poisoned");
+            if let Some(mw) = store.take() {
+                info!("_psychlib_save called");
+                mw.close().map_err(|e| LuaError::runtime(e.to_string()))?;
+            }
+            Ok(())
+        })?,
+    )?;
+    Ok(())
+}
+
+fn register_set_format(lua: &Lua, state: &HostState) -> LuaResult<()> {
+    let state = state.clone();
+    lua.globals().set(
+        "_psychlib_set_format",
+        lua.create_function(move |_, format: String| {
+            info!("_psychlib_set_format: format={}", format);
+            state
+                .set_format(&format)
+                .map_err(|e| LuaError::runtime(e.to_string()))?;
+            Ok(())
+        })?,
+    )?;
+    Ok(())
+}
+
+fn lua_table_to_fields(
+    tbl: &LuaTable,
+) -> LuaResult<impl IntoIterator<Item = (String, serde_json::Value)>> {
+    const PRIORITY_KEYS: &[&str] = &[
+        "trial_index",
+        "block",
+        "response_key",
+        "rt_ms",
+        "timed_out",
+        "correct",
+    ];
+
+    let mut priority: Vec<(String, serde_json::Value)> = Vec::new();
+    let mut rest: Vec<(String, serde_json::Value)> = Vec::new();
 
     for pair in tbl.clone().pairs::<LuaValue, LuaValue>() {
-        let (k, _) = pair?;
-        match k {
-            LuaValue::Integer(i) if i >= 1 => {
-                max_int = max_int.max(i as usize);
-            }
-            LuaValue::String(_) => {
-                has_str = true;
-                is_array = false;
-            }
-            _ => {
-                is_array = false;
-            }
+        let (k, v) = pair?;
+        let key = match &k {
+            LuaValue::String(s) => s.to_str()?.to_string(),
+            LuaValue::Integer(i) => i.to_string(),
+            other => format!("{:?}", other.type_name()),
+        };
+        let val = lua_value_to_json(v)?;
+
+        if PRIORITY_KEYS.contains(&key.as_str()) {
+            priority.push((key, val));
+        } else {
+            rest.push((key, val));
         }
     }
 
-    if is_array && !has_str && max_int > 0 {
-        let mut arr = vec![Value::Null; max_int];
-        for pair in tbl.clone().pairs::<LuaValue, LuaValue>() {
-            let (k, v) = pair?;
-            if let LuaValue::Integer(i) = k {
-                arr[(i as usize) - 1] = lua_value_to_json(v)?;
-            }
-        }
-        Ok(Value::Array(arr))
-    } else {
-        let mut map = Map::new();
-        for pair in tbl.clone().pairs::<LuaValue, LuaValue>() {
-            let (k, v) = pair?;
-            let key = match k {
-                LuaValue::String(s) => s.to_str()?.to_string(),
-                LuaValue::Integer(i) => i.to_string(),
-                other => format!("{:?}", other.type_name()),
-            };
-            map.insert(key, lua_value_to_json(v)?);
-        }
-        Ok(Value::Object(map))
-    }
+    priority.sort_by_key(|(k, _)| {
+        PRIORITY_KEYS
+            .iter()
+            .position(|p| p == k)
+            .unwrap_or(usize::MAX)
+    });
+
+    rest.sort_by(|(a, _), (b, _)| a.cmp(b));
+
+    priority.extend(rest);
+    Ok(priority)
 }
 
-fn lua_value_to_json(v: LuaValue) -> LuaResult<serde_json::Value> {
+pub fn lua_value_to_json(v: LuaValue) -> LuaResult<serde_json::Value> {
     Ok(match v {
         LuaValue::Nil => serde_json::Value::Null,
         LuaValue::Boolean(b) => serde_json::Value::Bool(b),
@@ -129,7 +130,19 @@ fn lua_value_to_json(v: LuaValue) -> LuaResult<serde_json::Value> {
             serde_json::Number::from_f64(f).unwrap_or(serde_json::Number::from(0)),
         ),
         LuaValue::String(s) => serde_json::Value::String(s.to_str()?.to_string()),
-        LuaValue::Table(tbl) => lua_table_to_json(&tbl)?,
+        LuaValue::Table(tbl) => {
+            let mut map = serde_json::Map::new();
+            for pair in tbl.pairs::<LuaValue, LuaValue>() {
+                let (k, v) = pair?;
+                let key = match k {
+                    LuaValue::String(s) => s.to_str()?.to_string(),
+                    LuaValue::Integer(i) => i.to_string(),
+                    other => format!("{:?}", other.type_name()),
+                };
+                map.insert(key, lua_value_to_json(v)?);
+            }
+            serde_json::Value::Object(map)
+        }
         _ => serde_json::Value::Null,
     })
 }

@@ -5,21 +5,18 @@ local TRIALS_PER_CELL = 5
 local FIXATION_MS = 500
 local RESPONSE_MS = 1500
 local ITI_MS = 800
-
 local RESPONSE_KEYS = { "left", "right" }
 
-local fix = Stim.fixation({ color = "white", arm_len = 0.05, thickness = 0.003 })
-
 local function make_arrows(direction, congruent)
-    local centre = direction == "left" and "<" or ">"
+    local centre  = direction == "left" and "<" or ">"
     local flanker
     if congruent then
         flanker = direction == "left" and "<<" or ">>"
     else
         flanker = direction == "left" and ">>" or "<<"
     end
-    local display = flanker .. centre .. flanker
-    return Stim.text(display, { size = 0.08, color = "white", align = "center" })
+    return Stim.text(flanker .. centre .. flanker,
+        { size = 0.08, color = "white", align = "center" })
 end
 
 local function make_trials()
@@ -34,94 +31,51 @@ local function make_trials()
     return list
 end
 
-local function shuffle(t)
-    for i = #t, 2, -1 do
-        local j = Rand.int(1, i)
-        t[i], t[j] = t[j], t[i]
-    end
-    return t
-end
+local experiment = Timeline()
+experiment:set_format("json")
 
-local function show_instructions()
-    local msg = Stim.text(
-        "Flanker Task\n\n" ..
-        "Respond to the CENTER arrow only.\n\n" ..
-        "When the center arrow is pointing left (<), Press the Left Arrow Key\n\n" ..
-        "When the center arrow is pointing right (>), Press the Right Arrow Key\n\n" ..
-        "Press any key to begin.",
-        { size = 0.04, color = "white", align = "center" }
-    )
-    Trial.show(msg)
-    Trial.wait_key()
-    Trial.blank(500)
-end
+experiment:add(Instructions({
+    text = "Flanker Task\n\n" ..
+           "Press LEFT for <   Press RIGHT for >\n" ..
+           "Respond to the CENTRE arrow only.\n\n" ..
+           "Press any key to begin.",
+}))
 
-local function show_break(block, n_blocks)
-    if block >= n_blocks then return end
-    local msg = Stim.text(
-        "Block " .. block .. " of " .. n_blocks .. " complete.\n\n" ..
-        "Take a short break.\n" ..
-        "Press any key when ready.",
-        { size = 0.04, color = "white", align = "center" }
-    )
-    Trial.show(msg)
-    Trial.wait_key()
-    Trial.blank(500)
-end
+experiment:add(ForBlocks(N_BLOCKS, function(block)
+    return Sequence({
+        ForTrials(Shuffle(make_trials()), function(trial)
+            local correct_key = trial.direction == "left" and "left" or "right"
+            return Sequence({
+                Fixation({ duration = FIXATION_MS }),
+                Stimulus({
+                    stim = make_arrows(trial.direction, trial.congruent),
+                    keys = RESPONSE_KEYS,
+                    timeout = RESPONSE_MS,
+                    correct_key = correct_key,
+                }),
+                Blank({ duration = ITI_MS }),
+                Record({
+                    direction = trial.direction,
+                    congruent = trial.congruent,
+                }),
+            })
+        end),
 
-local function run_trial(trial)
-    local stim = make_arrows(trial.direction, trial.congruent)
-
-    Trial.show(fix, FIXATION_MS)
-
-    Trial.show(stim)
-    local resp = Trial.wait_key({
-        keys = RESPONSE_KEYS,
-        timeout = RESPONSE_MS,
+        If(function() return ctx.block < N_BLOCKS end,
+            Instructions({
+                text = "Block " .. block .. " of " .. N_BLOCKS .. " complete.\n\n" ..
+                       "Take a short break.\n" ..
+                       "Press any key when ready.",
+            })
+        ),
     })
+end))
 
-    Trial.blank(ITI_MS)
+experiment:add(EndScreen({
+    text = "Task complete. Thank you!",
+    duration = 2000,
+}))
 
-    local correct_key = trial.direction == "left" and "left" or "right"
-    local correct = resp ~= nil and resp.key == correct_key
+experiment:add(Save())
 
-    return {
-        correct = correct,
-        response_rt_ms = resp and resp.rt_ms,
-        responded = resp ~= nil,
-        response_key = resp and resp.key or nil,
-    }
-end
-
-show_instructions()
-
-for block = 1, N_BLOCKS do
-    Trial.set_block(block)
-    local trials = shuffle(make_trials())
-
-    for _, trial in ipairs(trials) do
-        local result = run_trial(trial)
-
-        Data.record({
-            block = block,
-            trial = Trial.trial_index(),
-            direction = trial.direction,
-            congruent = trial.congruent,
-            correct = result.correct,
-            response_rt_ms = result.response_rt_ms,
-            responded = result.responded,
-            response_key = result.response_key,
-        })
-
-        Trial.next()
-    end
-
-    show_break(block, N_BLOCKS)
-end
-
-Trial.show(Stim.text(
-    "Task complete. Thank you!",
-    { size = 0.05, color = "white", align = "center" }
-), 2000)
-
-Data.save()
+experiment:run()
