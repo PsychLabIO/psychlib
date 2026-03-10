@@ -37,7 +37,7 @@ experiment:set_format("json")
 experiment:add(Instructions({
     text = "Flanker Task\n\n" ..
            "Press LEFT for <   Press RIGHT for >\n" ..
-           "Respond to the CENTRE arrow only.\n\n" ..
+           "Respond to the CENTER arrow only.\n\n" ..
            "Press any key to begin.",
 }))
 

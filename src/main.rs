@@ -146,11 +146,8 @@ fn cmd_run(args: RunArgs) -> Result<()> {
         },
     };
 
-    if args.headless {
-        psychlib::runtime::headless_run(experiment)
-    } else {
-        psychlib::runtime::run(experiment)
-    }
+    psychlib::runtime::run(experiment)
+    
 }
 
 fn cmd_check(args: CheckArgs) -> Result<()> {
