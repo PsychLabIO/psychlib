@@ -34,9 +34,7 @@ fn register_show(lua: &Lua, state: &HostState) -> LuaResult<()> {
             let stim = crate::script::api_stim::lua_to_stim(&stim_tbl)?;
 
             let flip_instant = {
-                let guard = render_handle
-                    .lock()
-                    .expect("render_handle mutex poisoned");
+                let guard = render_handle.lock().expect("render_handle mutex poisoned");
 
                 match guard.as_ref() {
                     Some(handle) => handle
@@ -75,14 +73,10 @@ fn register_blank(lua: &Lua, state: &HostState) -> LuaResult<()> {
         "_psychlib_blank",
         lua.create_function(move |lua_ctx, ms: Option<f64>| {
             let flip_instant = {
-                let guard = render_handle
-                    .lock()
-                    .expect("render_handle mutex poisoned");
+                let guard = render_handle.lock().expect("render_handle mutex poisoned");
 
                 match guard.as_ref() {
-                    Some(handle) => handle
-                        .clear_and_wait_flip()
-                        .map_err(LuaError::external)?,
+                    Some(handle) => handle.clear_and_wait_flip().map_err(LuaError::external)?,
                     None => {
                         tracing::warn!("_psychlib_blank called but no renderer attached");
                         if let Some(ms) = ms {

@@ -18,7 +18,7 @@ impl Rng {
         Self::new(t ^ 0xdeadbeefcafe1234)
     }
 
-    /// xorshift64 — period 2^64-1
+    /// xorshift64 - period 2^64-1
     fn next_u64(&mut self) -> u64 {
         let mut x = self.0;
         x ^= x << 13;

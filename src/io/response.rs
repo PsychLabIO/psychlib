@@ -107,7 +107,7 @@ impl<'a> ResponseWindow<'a> {
     pub fn wait(self) -> ResponseOutcome {
         let onset = self
             .onset
-            .expect("ResponseWindow::wait called before arm() — call arm() after stimulus onset");
+            .expect("ResponseWindow::wait called before arm() - call arm() after stimulus onset");
 
         let deadline: Option<Instant> = self.timeout.map(|t| onset + t);
 

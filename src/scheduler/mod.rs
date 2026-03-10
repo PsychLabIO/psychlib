@@ -162,7 +162,7 @@ impl Scheduler {
         if let Some(err) = event.timing_error() {
             if err.abs() > Duration::from_millis(2) {
                 warn!(
-                    "Timing error on event {} ({:?}): {} — check system load",
+                    "Timing error on event {} ({:?}): {} - check system load",
                     event.id, event.kind, err
                 );
             }

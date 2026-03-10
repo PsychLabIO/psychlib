@@ -147,7 +147,6 @@ fn cmd_run(args: RunArgs) -> Result<()> {
     };
 
     psychlib::runtime::run(experiment)
-    
 }
 
 fn cmd_check(args: CheckArgs) -> Result<()> {

@@ -146,7 +146,7 @@ function Feedback(opts)
     assert(type(opts.duration)       == "number", "Feedback: duration is required")
     return make_node(function()
         assert(ctx.last_response ~= nil,
-            "Feedback: no last_response in ctx — place Feedback after a Stimulus node")
+            "Feedback: no last_response in ctx - place Feedback after a Stimulus node")
         local text = ctx.last_response.correct
             and opts.correct_text
             or  opts.incorrect_text

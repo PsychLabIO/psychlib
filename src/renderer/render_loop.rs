@@ -210,7 +210,7 @@ impl RenderLoop {
                     .as_ref()
                     .map(|ctx| ctx.size.width as f32 / ctx.size.height as f32)
                     .unwrap_or(1.0);
-                
+
                 pipeline.draw_quad(
                     pass,
                     device,

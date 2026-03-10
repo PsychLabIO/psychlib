@@ -1,4 +1,4 @@
-use crate::data::record::{value_to_csv_field, TrialRecord};
+use crate::data::record::{TrialRecord, value_to_csv_field};
 use crate::data::session::SessionHeader;
 use anyhow::{Context, Result};
 use std::io::{BufWriter, Write};
@@ -37,10 +37,10 @@ pub enum OutputFormat {
 impl OutputFormat {
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
-            "csv"  => Some(Self::Csv),
+            "csv" => Some(Self::Csv),
             "json" => Some(Self::Json),
             "both" => Some(Self::Both),
-            _      => None,
+            _ => None,
         }
     }
 }
@@ -55,55 +55,78 @@ pub struct MultiWriter {
     writers: Vec<Box<dyn DataStore + Send>>,
     output_dir: std::path::PathBuf,
     header: SessionHeader,
+    format: OutputFormat,
+    initialised: bool,
 }
 
 impl MultiWriter {
-    /// Start with a single CSV writer. This is the default if the script
-    /// never calls `set_format`.
+    /// Create a new `MultiWriter`. No files are created until the first
+    /// `write_trial` or `close` call.
     pub fn new(output_dir: &Path, header: SessionHeader) -> Result<Self> {
-        let w = CsvWriter::create(output_dir, header.clone())?;
         Ok(Self {
-            writers: vec![Box::new(w)],
+            writers: Vec::new(),
             output_dir: output_dir.to_path_buf(),
             header,
+            format: OutputFormat::Csv,
+            initialised: false,
         })
     }
 
-    /// Replace the active writer set based on the requested format.
-    /// Must be called before the first trial is written.
+    /// Set the output format. Must be called before the first trial is written.
     pub fn set_format(&mut self, format: &OutputFormat) -> Result<()> {
-        self.writers.clear();
-        match format {
+        if self.initialised {
+            tracing::warn!("set_format called after the first trial was written - ignored");
+            return Ok(());
+        }
+        self.format = format.clone();
+        Ok(())
+    }
+
+    /// Initialise writers on demand. Called by `write_trial` and `close`.
+    fn ensure_initialised(&mut self) -> Result<()> {
+        if self.initialised {
+            return Ok(());
+        }
+        match self.format {
             OutputFormat::Csv => {
-                self.writers.push(Box::new(
-                    CsvWriter::create(&self.output_dir, self.header.clone())?,
-                ));
+                self.writers.push(Box::new(CsvWriter::create(
+                    &self.output_dir,
+                    self.header.clone(),
+                )?));
             }
             OutputFormat::Json => {
-                self.writers.push(Box::new(
-                    JsonWriter::create(&self.output_dir, self.header.clone())?,
-                ));
+                self.writers.push(Box::new(JsonWriter::create(
+                    &self.output_dir,
+                    self.header.clone(),
+                )?));
             }
             OutputFormat::Both => {
-                self.writers.push(Box::new(
-                    CsvWriter::create(&self.output_dir, self.header.clone())?,
-                ));
-                self.writers.push(Box::new(
-                    JsonWriter::create(&self.output_dir, self.header.clone())?,
-                ));
+                self.writers.push(Box::new(CsvWriter::create(
+                    &self.output_dir,
+                    self.header.clone(),
+                )?));
+                self.writers.push(Box::new(JsonWriter::create(
+                    &self.output_dir,
+                    self.header.clone(),
+                )?));
             }
         }
+        self.initialised = true;
         Ok(())
     }
 
     pub fn write_trial(&mut self, record: &TrialRecord) -> Result<()> {
+        self.ensure_initialised()?;
         for w in &mut self.writers {
             w.write_trial(record)?;
         }
         Ok(())
     }
 
-    pub fn close(self) -> Result<()> {
+    pub fn close(mut self) -> Result<()> {
+        // Initialise even if no trials were written so the session header and
+        // an empty file are always produced on Save().
+        self.ensure_initialised()?;
         for w in self.writers {
             w.close()?;
         }
@@ -154,8 +177,7 @@ impl CsvWriter {
         }
 
         let cols: Vec<String> = record.fields.keys().cloned().collect();
-        writeln!(self.writer, "{}", cols.join(","))
-            .context("Failed to write CSV column header")?;
+        writeln!(self.writer, "{}", cols.join(",")).context("Failed to write CSV column header")?;
 
         self.columns = Some(cols);
         Ok(())
@@ -171,7 +193,7 @@ impl DataStore for CsvWriter {
         for key in record.fields.keys() {
             if !columns.contains(key) {
                 warn!(
-                    "Trial {} has field '{}' not present in first trial — \
+                    "Trial {} has field '{}' not present in first trial - \
                      this value cannot be placed in a CSV column and will be dropped",
                     record
                         .fields
@@ -265,8 +287,8 @@ impl JsonWriter {
 
 impl DataStore for JsonWriter {
     fn write_trial(&mut self, record: &TrialRecord) -> Result<()> {
-        let val = serde_json::to_value(&record.fields)
-            .context("Failed to serialize trial record")?;
+        let val =
+            serde_json::to_value(&record.fields).context("Failed to serialize trial record")?;
 
         debug!(
             "JSON: queued trial {} ({})",

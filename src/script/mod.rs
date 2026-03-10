@@ -29,10 +29,9 @@ pub(crate) struct HostState {
 
 impl HostState {
     pub fn set_format(&self, format: &str) -> anyhow::Result<()> {
-        let fmt = OutputFormat::from_str(format)
-            .ok_or_else(|| anyhow::anyhow!(
-                "Unknown format {:?}. Use csv, json, or both.", format
-            ))?;
+        let fmt = OutputFormat::from_str(format).ok_or_else(|| {
+            anyhow::anyhow!("Unknown format {:?}. Use csv, json, or both.", format)
+        })?;
         let mut store = self.data_store.lock().expect("data_store poisoned");
         if let Some(ref mut mw) = *store {
             mw.set_format(&fmt)?;
@@ -59,9 +58,8 @@ impl ScriptHost {
 
         std::fs::create_dir_all(output_dir).map_err(Error::Io)?;
 
-        let multi =
-            MultiWriter::new(output_dir, header.clone())
-                .map_err(|e| Error::Clock(e.to_string()))?;
+        let multi = MultiWriter::new(output_dir, header.clone())
+            .map_err(|e| Error::Clock(e.to_string()))?;
 
         let state = HostState {
             clock,

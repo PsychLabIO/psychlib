@@ -20,37 +20,46 @@ fn clock_now_ms_returns_non_negative_number() {
 fn clock_now_ms_advances() {
     let dir = tempfile::tempdir().unwrap();
     let host = make_host(dir.path());
-    host.run("
+    host.run(
+        "
         local t1 = Clock.now_ms()
         Clock.sleep(5)
         local t2 = Clock.now_ms()
         assert(t2 > t1, 'clock did not advance: t1=' .. t1 .. ' t2=' .. t2)
-    ").unwrap();
+    ",
+    )
+    .unwrap();
 }
 
 #[test]
 fn clock_sleep_takes_approximately_correct_time() {
     let dir = tempfile::tempdir().unwrap();
     let host = make_host(dir.path());
-    host.run("
+    host.run(
+        "
         local t1 = Clock.now_ms()
         Clock.sleep(20)
         local elapsed = Clock.now_ms() - t1
         assert(elapsed >= 15, 'sleep too short: ' .. elapsed .. 'ms')
         assert(elapsed < 200, 'sleep too long: ' .. elapsed .. 'ms')
-    ").unwrap();
+    ",
+    )
+    .unwrap();
 }
 
 #[test]
 fn rand_int_is_within_bounds() {
     let dir = tempfile::tempdir().unwrap();
     let host = make_host(dir.path());
-    host.run("
+    host.run(
+        "
         for _ = 1, 100 do
             local n = Rand.int(1, 6)
             assert(n >= 1 and n <= 6, 'out of range: ' .. n)
         end
-    ").unwrap();
+    ",
+    )
+    .unwrap();
 }
 
 #[test]
@@ -64,13 +73,15 @@ fn rand_int_same_seed_same_sequence() {
         dir1.path(),
         SessionHeader::new("T", "t", "/t.lua", Some(1), clock.info()),
         Some(1),
-    ).unwrap();
+    )
+    .unwrap();
     let h2 = ScriptHost::new(
         clock.clone(),
         dir2.path(),
         SessionHeader::new("T", "t", "/t.lua", Some(1), clock.info()),
         Some(1),
-    ).unwrap();
+    )
+    .unwrap();
 
     let script = "
         SEQ = {}
@@ -79,14 +90,22 @@ fn rand_int_same_seed_same_sequence() {
     h1.run(script).unwrap();
     h2.run(script).unwrap();
 
-    let seq1: Vec<i64> = h1.lua().globals()
-        .get::<mlua::Table>("SEQ").unwrap()
+    let seq1: Vec<i64> = h1
+        .lua()
+        .globals()
+        .get::<mlua::Table>("SEQ")
+        .unwrap()
         .sequence_values::<i64>()
-        .collect::<mlua::Result<_>>().unwrap();
-    let seq2: Vec<i64> = h2.lua().globals()
-        .get::<mlua::Table>("SEQ").unwrap()
+        .collect::<mlua::Result<_>>()
+        .unwrap();
+    let seq2: Vec<i64> = h2
+        .lua()
+        .globals()
+        .get::<mlua::Table>("SEQ")
+        .unwrap()
         .sequence_values::<i64>()
-        .collect::<mlua::Result<_>>().unwrap();
+        .collect::<mlua::Result<_>>()
+        .unwrap();
 
     assert_eq!(seq1, seq2, "same seed should produce same sequence");
 }
@@ -95,33 +114,40 @@ fn rand_int_same_seed_same_sequence() {
 fn rand_float_is_within_bounds() {
     let dir = tempfile::tempdir().unwrap();
     let host = make_host(dir.path());
-    host.run("
+    host.run(
+        "
         for _ = 1, 100 do
             local f = Rand.float(0.0, 1.0)
             assert(f >= 0.0 and f < 1.0, 'out of range: ' .. f)
         end
-    ").unwrap();
+    ",
+    )
+    .unwrap();
 }
 
 #[test]
 fn rand_shuffle_returns_same_elements() {
     let dir = tempfile::tempdir().unwrap();
     let host = make_host(dir.path());
-    host.run("
+    host.run(
+        "
         local original = {10, 20, 30, 40, 50}
         local shuffled = Rand.shuffle(original)
         assert(#shuffled == #original, 'length mismatch')
         local sum = 0
         for _, v in ipairs(shuffled) do sum = sum + v end
         assert(sum == 150, 'element sum mismatch: ' .. sum)
-    ").unwrap();
+    ",
+    )
+    .unwrap();
 }
 
 #[test]
 fn rand_choice_returns_element_from_table() {
     let dir = tempfile::tempdir().unwrap();
     let host = make_host(dir.path());
-    host.run("
+    host.run(
+        "
         local items = {'a', 'b', 'c', 'd'}
         for _ = 1, 20 do
             local c = Rand.choice(items)
@@ -131,25 +157,31 @@ fn rand_choice_returns_element_from_table() {
             end
             assert(found, 'choice not in table: ' .. tostring(c))
         end
-    ").unwrap();
+    ",
+    )
+    .unwrap();
 }
 
 #[test]
 fn rand_balanced_shuffle_correct_length() {
     let dir = tempfile::tempdir().unwrap();
     let host = make_host(dir.path());
-    host.run("
+    host.run(
+        "
         local conditions = {'A', 'B', 'C', 'D'}
         local trials = Rand.balanced_shuffle(conditions, 20)
         assert(#trials == 20, 'expected 20 trials, got ' .. #trials)
-    ").unwrap();
+    ",
+    )
+    .unwrap();
 }
 
 #[test]
 fn rand_balanced_shuffle_each_item_appears_evenly() {
     let dir = tempfile::tempdir().unwrap();
     let host = make_host(dir.path());
-    host.run("
+    host.run(
+        "
         local items = {'A', 'B', 'C', 'D'}
         local trials = Rand.balanced_shuffle(items, 20)
         local counts = {}
@@ -160,7 +192,9 @@ fn rand_balanced_shuffle_each_item_appears_evenly() {
             local c = counts[item] or 0
             assert(c == 5, item .. ' appeared ' .. c .. ' times, expected 5')
         end
-    ").unwrap();
+    ",
+    )
+    .unwrap();
 }
 
 #[test]
@@ -174,24 +208,29 @@ fn blank_primitive_sleeps() {
 fn wait_key_primitive_times_out_and_returns_nil() {
     let dir = tempfile::tempdir().unwrap();
     let host = make_host(dir.path());
-    host.run("
+    host.run(
+        "
         local r = _psychlib_wait_key({ timeout = 5 })
         assert(r == nil, 'expected nil on timeout, got: ' .. tostring(r))
-    ").unwrap();
+    ",
+    )
+    .unwrap();
 }
 
 #[test]
 fn ctx_is_injected_as_table() {
     let dir = tempfile::tempdir().unwrap();
     let host = make_host(dir.path());
-    host.run("assert(type(ctx) == 'table', 'ctx should be a table')").unwrap();
+    host.run("assert(type(ctx) == 'table', 'ctx should be a table')")
+        .unwrap();
 }
 
 #[test]
 fn sequence_runs_nodes_in_order() {
     let dir = tempfile::tempdir().unwrap();
     let host = make_host(dir.path());
-    host.run("
+    host.run(
+        "
         local log = {}
         local function make_log_node(label)
             return { run = function() table.insert(log, label) end }
@@ -200,14 +239,17 @@ fn sequence_runs_nodes_in_order() {
         seq:run()
         assert(log[1] == 'a' and log[2] == 'b' and log[3] == 'c',
             'order wrong: ' .. table.concat(log, ','))
-    ").unwrap();
+    ",
+    )
+    .unwrap();
 }
 
 #[test]
 fn for_blocks_iterates_correct_count_and_sets_ctx_block() {
     let dir = tempfile::tempdir().unwrap();
     let host = make_host(dir.path());
-    host.run("
+    host.run(
+        "
         ctx.block = 0
         local blocks_seen = {}
         ForBlocks(3, function(block)
@@ -218,14 +260,17 @@ fn for_blocks_iterates_correct_count_and_sets_ctx_block() {
         assert(#blocks_seen == 3, 'expected 3 blocks, got ' .. #blocks_seen)
         assert(blocks_seen[1] == 1, 'block 1 wrong: ' .. blocks_seen[1])
         assert(blocks_seen[3] == 3, 'block 3 wrong: ' .. blocks_seen[3])
-    ").unwrap();
+    ",
+    )
+    .unwrap();
 }
 
 #[test]
 fn for_trials_iterates_list_and_sets_ctx_trial() {
     let dir = tempfile::tempdir().unwrap();
     let host = make_host(dir.path());
-    host.run("
+    host.run(
+        "
         ctx.trial_index = 0
         local seen = {}
         local trials = { {id=1}, {id=2}, {id=3} }
@@ -237,14 +282,17 @@ fn for_trials_iterates_list_and_sets_ctx_trial() {
         assert(#seen == 3, 'expected 3 trials')
         assert(seen[1] == 1 and seen[2] == 2 and seen[3] == 3,
             'trial ids wrong')
-    ").unwrap();
+    ",
+    )
+    .unwrap();
 }
 
 #[test]
 fn for_trials_increments_trial_index() {
     let dir = tempfile::tempdir().unwrap();
     let host = make_host(dir.path());
-    host.run("
+    host.run(
+        "
         ctx.trial_index = 0
         local indices = {}
         ForTrials({ {}, {}, {} }, function(_)
@@ -254,69 +302,84 @@ fn for_trials_increments_trial_index() {
         end):run()
         assert(indices[1] == 1, 'first trial_index should be 1')
         assert(indices[3] == 3, 'third trial_index should be 3')
-    ").unwrap();
+    ",
+    )
+    .unwrap();
 }
 
 #[test]
 fn if_node_runs_true_branch() {
     let dir = tempfile::tempdir().unwrap();
     let host = make_host(dir.path());
-    host.run("
+    host.run(
+        "
         local ran = nil
         If(function() return true end,
             { run = function() ran = 'true_branch' end },
             { run = function() ran = 'false_branch' end }
         ):run()
         assert(ran == 'true_branch', 'expected true branch, got: ' .. tostring(ran))
-    ").unwrap();
+    ",
+    )
+    .unwrap();
 }
 
 #[test]
 fn if_node_runs_false_branch() {
     let dir = tempfile::tempdir().unwrap();
     let host = make_host(dir.path());
-    host.run("
+    host.run(
+        "
         local ran = nil
         If(function() return false end,
             { run = function() ran = 'true_branch' end },
             { run = function() ran = 'false_branch' end }
         ):run()
         assert(ran == 'false_branch', 'expected false branch, got: ' .. tostring(ran))
-    ").unwrap();
+    ",
+    )
+    .unwrap();
 }
 
 #[test]
 fn if_node_no_else_does_nothing_on_false() {
     let dir = tempfile::tempdir().unwrap();
     let host = make_host(dir.path());
-    host.run("
+    host.run(
+        "
         local ran = false
         If(function() return false end,
             { run = function() ran = true end }
         ):run()
         assert(not ran, 'should not have run')
-    ").unwrap();
+    ",
+    )
+    .unwrap();
 }
 
 #[test]
 fn loop_node_runs_correct_iterations() {
     let dir = tempfile::tempdir().unwrap();
     let host = make_host(dir.path());
-    host.run("
+    host.run(
+        "
         local count = 0
         local i = 0
         Loop(function() i = i + 1; return i <= 5 end,
             { run = function() count = count + 1 end }
         ):run()
         assert(count == 5, 'expected 5 iterations, got ' .. count)
-    ").unwrap();
+    ",
+    )
+    .unwrap();
 }
 
 #[test]
 fn shuffle_returns_same_elements_different_order_possible() {
     let dir = tempfile::tempdir().unwrap();
     let host = make_host(dir.path());
-    host.run("
+    host.run(
+        "
         local original = {1, 2, 3, 4, 5}
         local shuffled = Shuffle(original)
         assert(#shuffled == #original, 'length mismatch')
@@ -325,22 +388,28 @@ fn shuffle_returns_same_elements_different_order_possible() {
         assert(sum == 15, 'element sum wrong: ' .. sum)
         -- Original should be unmodified
         assert(original[1] == 1, 'original was mutated')
-    ").unwrap();
+    ",
+    )
+    .unwrap();
 }
 
 #[test]
 fn record_node_writes_to_csv() {
     let dir = tempfile::tempdir().unwrap();
     let host = make_host(dir.path());
-    host.run("
+    host.run(
+        "
         ctx.trial_index = 1
         ctx.block       = 1
         ctx.last_response = { key='left', rt_ms=312.4, timed_out=false, correct=true }
         Record({ condition='congruent' }):run()
         _psychlib_save()
-    ").unwrap();
+    ",
+    )
+    .unwrap();
 
-    let csv = std::fs::read_dir(dir.path()).unwrap()
+    let csv = std::fs::read_dir(dir.path())
+        .unwrap()
         .filter_map(|e| e.ok())
         .find(|e| e.path().extension().map_or(false, |x| x == "csv"))
         .expect("no CSV file found");
@@ -355,21 +424,28 @@ fn record_node_writes_to_csv() {
 fn record_node_omits_response_fields_when_no_last_response() {
     let dir = tempfile::tempdir().unwrap();
     let host = make_host(dir.path());
-    host.run("
+    host.run(
+        "
         ctx.trial_index   = 1
         ctx.block         = 1
         ctx.last_response = nil
         Record({ condition='baseline' }):run()
         _psychlib_save()
-    ").unwrap();
+    ",
+    )
+    .unwrap();
 
-    let csv = std::fs::read_dir(dir.path()).unwrap()
+    let csv = std::fs::read_dir(dir.path())
+        .unwrap()
         .filter_map(|e| e.ok())
         .find(|e| e.path().extension().map_or(false, |x| x == "csv"))
         .expect("no CSV file found");
 
     let contents = std::fs::read_to_string(csv.path()).unwrap();
-    assert!(!contents.contains("timed_out"), "timed_out should be absent");
+    assert!(
+        !contents.contains("timed_out"),
+        "timed_out should be absent"
+    );
     assert!(!contents.contains("rt_ms"), "rt_ms should be absent");
     assert!(contents.contains("baseline"));
 }
@@ -378,7 +454,8 @@ fn record_node_omits_response_fields_when_no_last_response() {
 fn timeline_run_initialises_ctx_fields() {
     let dir = tempfile::tempdir().unwrap();
     let host = make_host(dir.path());
-    host.run("
+    host.run(
+        "
         local experiment = Timeline()
         experiment:add({ run = function()
             assert(ctx.trial_index == 0, 'trial_index not 0')
@@ -387,7 +464,9 @@ fn timeline_run_initialises_ctx_fields() {
             assert(ctx.last_response == nil, 'last_response not nil')
         end })
         experiment:run()
-    ").unwrap();
+    ",
+    )
+    .unwrap();
 }
 
 #[test]
@@ -410,9 +489,14 @@ fn sandbox_blocks_os_execute() {
 fn lua_value_to_json_object() {
     use crate::script::api_data::lua_value_to_json;
     let lua = mlua::Lua::new();
-    let tbl: mlua::Table = lua.load(r#"
+    let tbl: mlua::Table = lua
+        .load(
+            r#"
         return { condition = "congruent", correct = true, rt = 423.5 }
-    "#).eval().unwrap();
+    "#,
+        )
+        .eval()
+        .unwrap();
     let json = lua_value_to_json(mlua::Value::Table(tbl)).unwrap();
     assert_eq!(json["condition"], "congruent");
     assert_eq!(json["correct"], true);
@@ -423,9 +507,14 @@ fn lua_value_to_json_object() {
 fn lua_value_to_json_nested() {
     use crate::script::api_data::lua_value_to_json;
     let lua = mlua::Lua::new();
-    let tbl: mlua::Table = lua.load(r#"
+    let tbl: mlua::Table = lua
+        .load(
+            r#"
         return { outer = { inner = "value" } }
-    "#).eval().unwrap();
+    "#,
+        )
+        .eval()
+        .unwrap();
     let json = lua_value_to_json(mlua::Value::Table(tbl)).unwrap();
     assert_eq!(json["outer"]["inner"], "value");
 }
@@ -434,7 +523,8 @@ fn lua_value_to_json_nested() {
 fn set_format_json_writes_json_file() {
     let dir = tempfile::tempdir().unwrap();
     let host = make_host(dir.path());
-    host.run("
+    host.run(
+        "
         local experiment = Timeline()
         experiment:set_format('json')
         experiment:add({ run = function()
@@ -445,9 +535,12 @@ fn set_format_json_writes_json_file() {
         end })
         experiment:run()
         _psychlib_save()
-    ").unwrap();
+    ",
+    )
+    .unwrap();
 
-    let json = std::fs::read_dir(dir.path()).unwrap()
+    let json = std::fs::read_dir(dir.path())
+        .unwrap()
         .filter_map(|e| e.ok())
         .find(|e| e.path().extension().map_or(false, |x| x == "json"))
         .expect("no JSON file found");
@@ -466,7 +559,8 @@ fn set_format_json_writes_json_file() {
 fn set_format_json_does_not_write_csv() {
     let dir = tempfile::tempdir().unwrap();
     let host = make_host(dir.path());
-    host.run("
+    host.run(
+        "
         local experiment = Timeline()
         experiment:set_format('json')
         experiment:add({ run = function()
@@ -477,9 +571,12 @@ fn set_format_json_does_not_write_csv() {
         end })
         experiment:run()
         _psychlib_save()
-    ").unwrap();
+    ",
+    )
+    .unwrap();
 
-    let has_csv = std::fs::read_dir(dir.path()).unwrap()
+    let has_csv = std::fs::read_dir(dir.path())
+        .unwrap()
         .filter_map(|e| e.ok())
         .any(|e| e.path().extension().map_or(false, |x| x == "csv"));
 
@@ -490,7 +587,8 @@ fn set_format_json_does_not_write_csv() {
 fn set_format_both_writes_csv_and_json() {
     let dir = tempfile::tempdir().unwrap();
     let host = make_host(dir.path());
-    host.run("
+    host.run(
+        "
         local experiment = Timeline()
         experiment:set_format('both')
         experiment:add({ run = function()
@@ -501,16 +599,20 @@ fn set_format_both_writes_csv_and_json() {
         end })
         experiment:run()
         _psychlib_save()
-    ").unwrap();
+    ",
+    )
+    .unwrap();
 
-    let has_csv = std::fs::read_dir(dir.path()).unwrap()
+    let has_csv = std::fs::read_dir(dir.path())
+        .unwrap()
         .filter_map(|e| e.ok())
         .any(|e| e.path().extension().map_or(false, |x| x == "csv"));
-    let has_json = std::fs::read_dir(dir.path()).unwrap()
+    let has_json = std::fs::read_dir(dir.path())
+        .unwrap()
         .filter_map(|e| e.ok())
         .any(|e| e.path().extension().map_or(false, |x| x == "json"));
 
-    assert!(has_csv,  "both format should produce a CSV file");
+    assert!(has_csv, "both format should produce a CSV file");
     assert!(has_json, "both format should produce a JSON file");
 }
 
@@ -518,15 +620,19 @@ fn set_format_both_writes_csv_and_json() {
 fn set_format_default_is_csv() {
     let dir = tempfile::tempdir().unwrap();
     let host = make_host(dir.path());
-    host.run("
+    host.run(
+        "
         ctx.trial_index = 1
         ctx.block = 1
         ctx.last_response = nil
         Record({ x = 1 }):run()
         _psychlib_save()
-    ").unwrap();
+    ",
+    )
+    .unwrap();
 
-    let has_csv = std::fs::read_dir(dir.path()).unwrap()
+    let has_csv = std::fs::read_dir(dir.path())
+        .unwrap()
         .filter_map(|e| e.ok())
         .any(|e| e.path().extension().map_or(false, |x| x == "csv"));
 
@@ -537,9 +643,11 @@ fn set_format_default_is_csv() {
 fn set_format_unknown_string_returns_error() {
     let dir = tempfile::tempdir().unwrap();
     let host = make_host(dir.path());
-    let result = host.run("
+    let result = host.run(
+        "
         local experiment = Timeline()
         experiment:set_format('parquet')
-    ");
+    ",
+    );
     assert!(result.is_err(), "unknown format should return an error");
 }

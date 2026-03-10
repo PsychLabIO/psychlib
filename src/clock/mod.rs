@@ -8,10 +8,6 @@ use tracing::trace;
 mod instant;
 mod platform;
 
-/// `Clock` is cheap to clone — it's an `Arc` internally. A single `Clock`
-/// instance should be created at experiment start and shared across the
-/// trial runner, scheduler, and data recorder so all timestamps share
-/// the same epoch.
 #[derive(Clone, Debug)]
 pub struct Clock {
     inner: Arc<ClockInner>,

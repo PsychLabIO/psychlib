@@ -17,7 +17,7 @@ pub enum Error {
     #[error("Serialization error: {0}")]
     Serde(#[from] serde_json::Error),
 
-    #[error("Timing overflow — experiment ran longer than u64::MAX nanoseconds")]
+    #[error("Timing overflow - experiment ran longer than u64::MAX nanoseconds")]
     TimingOverflow,
 }
 

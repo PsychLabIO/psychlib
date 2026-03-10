@@ -415,7 +415,7 @@ impl TexturePipeline {
             if !self.failed.contains(path) {
                 warn!(
                     "TexturePipeline: draw_image called for '{path}' \
-                     which was never preloaded — showing magenta fallback"
+                     which was never preloaded - showing magenta fallback"
                 );
             }
             return DrawImageOutcome::Fallback { cx, cy, hw, hh };

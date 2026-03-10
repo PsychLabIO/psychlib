@@ -2,7 +2,7 @@ use crate::clock::{Clock, Instant};
 use crate::data::record::TrialRecord;
 use crate::data::session::SessionHeader;
 #[allow(unused_imports)]
-use crate::data::writer::{data_filename, CsvWriter, DataStore, JsonWriter};
+use crate::data::writer::{CsvWriter, DataStore, JsonWriter, data_filename};
 use crate::io::keyboard::KeyCode;
 use crate::io::response::Response;
 use crate::scheduler::TrialPhase;
@@ -124,7 +124,10 @@ fn session_header_extra_is_deterministic() {
     let comments = h.to_csv_comments();
     let aaa_pos = comments.find("# aaa:").unwrap();
     let zzz_pos = comments.find("# zzz:").unwrap();
-    assert!(aaa_pos < zzz_pos, "extra keys should appear in sorted order");
+    assert!(
+        aaa_pos < zzz_pos,
+        "extra keys should appear in sorted order"
+    );
 }
 
 #[test]
@@ -227,10 +230,7 @@ fn trial_record_builder_merge_overwrites_on_collision() {
         .merge(extra)
         .build();
 
-    assert_eq!(
-        r.fields.get("key").and_then(|v| v.as_str()),
-        Some("new")
-    );
+    assert_eq!(r.fields.get("key").and_then(|v| v.as_str()), Some("new"));
 }
 
 #[test]
@@ -324,8 +324,8 @@ fn json_writer_creates_valid_json() {
     Box::new(writer).close().unwrap();
 
     let contents = std::fs::read_to_string(&path).unwrap();
-    let root: serde_json::Value = serde_json::from_str(&contents)
-        .unwrap_or_else(|e| panic!("Invalid JSON: {}", e));
+    let root: serde_json::Value =
+        serde_json::from_str(&contents).unwrap_or_else(|e| panic!("Invalid JSON: {}", e));
 
     assert_eq!(root["session"]["participant"], "P001");
 
@@ -347,7 +347,10 @@ fn json_writer_timed_out_trial_has_no_rt_key() {
     let root: serde_json::Value = serde_json::from_str(&contents).unwrap();
     let trial = &root["trials"][0];
 
-    assert!(trial.get("rt_ms").is_none(), "timed-out trial should have no rt_ms key");
+    assert!(
+        trial.get("rt_ms").is_none(),
+        "timed-out trial should have no rt_ms key"
+    );
     assert!(
         trial.get("response_key").is_none(),
         "timed-out trial should have no response_key"

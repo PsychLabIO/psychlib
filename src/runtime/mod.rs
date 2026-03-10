@@ -30,7 +30,7 @@ pub fn run(config: ExperimentConfig) -> anyhow::Result<()> {
         config.seed.map_or("entropy".into(), |s| s.to_string())
     );
     info!(
-        "platform    : {} (hi-res sleep: {})",
+        "platform: {} (hi-res sleep: {})",
         clock_info.platform, clock_info.high_precision_sleep
     );
 
@@ -97,6 +97,6 @@ pub fn run(config: ExperimentConfig) -> anyhow::Result<()> {
         }
     }
 
-    info!("Session complete ✓");
+    info!("Session complete");
     Ok(())
 }
