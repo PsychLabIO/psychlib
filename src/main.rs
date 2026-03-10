@@ -118,15 +118,15 @@ fn cmd_run(args: RunArgs) -> Result<()> {
     }
 
     info!("psychlib v{}", env!("CARGO_PKG_VERSION"));
-    info!("participant : {}", args.participant);
-    info!("script      : {}", args.script.display());
-    info!("output      : {}", args.output.display());
+    info!("participant: {}", args.participant);
+    info!("script: {}", args.script.display());
+    info!("output: {}", args.output.display());
     info!(
-        "seed        : {}",
+        "seed: {}",
         args.seed.map_or("entropy".into(), |s| s.to_string())
     );
     info!(
-        "display     : {}x{}{}",
+        "display: {}x{}{}",
         args.width,
         args.height,
         if args.fullscreen { " (fullscreen)" } else { "" }
@@ -158,7 +158,7 @@ fn cmd_check(args: CheckArgs) -> Result<()> {
         .with_context(|| format!("Cannot read: {}", args.script.display()))?;
 
     validate_script(&args.script.to_string_lossy(), &source)?;
-    println!("✓  {} — OK", args.script.display());
+    println!("{} - OK", args.script.display());
     Ok(())
 }
 
@@ -169,15 +169,15 @@ fn cmd_info() -> Result<()> {
     println!("psychlib v{}", env!("CARGO_PKG_VERSION"));
     println!();
     println!("Runtime");
-    println!("platform       : {}", info.platform);
-    println!("hi-res sleep   : {}", info.high_precision_sleep);
-    println!("Luau           : mlua 0.10");
-    println!("wgpu           : 22");
-    println!("winit          : 0.30");
+    println!("platform: {}", info.platform);
+    println!("hi-res sleep: {}", info.high_precision_sleep);
+    println!("Luau: mlua 0.10");
+    println!("wgpu: 28");
+    println!("winit: 0.30");
     println!();
     println!("Build");
     println!(
-        "profile        : {}",
+        "profile: {}",
         if cfg!(debug_assertions) {
             "debug"
         } else {
@@ -190,8 +190,8 @@ fn cmd_info() -> Result<()> {
     let errors = timing_selftest(&clock);
     let mean_us = errors.iter().sum::<i64>() / errors.len() as i64;
     let max_us = errors.iter().copied().max().unwrap_or(0);
-    println!("mean jitter    : {} µs", mean_us);
-    println!("max jitter     : {} µs", max_us);
+    println!("mean jitter: {} µs", mean_us);
+    println!("max jitter: {} µs", max_us);
     if max_us > 2_000 {
         println!("Max jitter > 2 ms");
     } else {
@@ -210,7 +210,7 @@ fn validate_script(name: &str, source: &str) -> Result<()> {
 }
 
 fn run_timing_benchmark(clock: &Clock) -> Result<()> {
-    info!("Timing benchmark (20 x 10 ms sleeps)…");
+    info!("Timing benchmark (20 x 10 ms sleeps)...");
     let errors = timing_selftest(clock);
     let mean_us = errors.iter().sum::<i64>() / errors.len() as i64;
     let max_us = errors.iter().copied().max().unwrap_or(0);
