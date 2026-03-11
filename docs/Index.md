@@ -1,6 +1,6 @@
 # PsychLib Lua API
 
-Reference for the Lua scripting API exposed to experiment scripts by `psychlib`. All globals are injected automatically; no `require` calls are needed.
+Reference for the Lua scripting API exposed to experiment scripts by `psychlib`. All globals are injected automatically, meaning no `require` calls are needed.
 
 ---
 
@@ -11,7 +11,7 @@ Reference for the Lua scripting API exposed to experiment scripts by `psychlib`.
 | [`Clock`](clock.md) | High-resolution monotonic clock |
 | [`Stim`](stim.md) | Stimulus constructors and color helpers |
 | [`Rand`](rand.md) | Random number generation and balanced sequence utilities |
-| [`Ctx`](ctx.md) | Shared runtime context table|
+| [`Context`](context.md) | Shared runtime context table |
 | `psychlib_VERSION` | Version string of the running psychlib build |
 
 ---
@@ -41,7 +41,15 @@ Experiments are built by composing nodes into a `Timeline`. Nodes are plain Lua 
 
 ## Coordinate system
 
-Screen positions use **normalised coordinates** where `(0, 0)` is the centre of the display. The value `1.0` reaches the edge of the screen along the shorter axis, so coordinates are consistent across different display resolutions and aspect ratios.
+Screen positions use **normalised 0–1 coordinates**, top-left origin, with y increasing downward:
+
+| Point | Meaning |
+|---|---|
+| `(0.0, 0.0)` | Top-left corner |
+| `(0.5, 0.5)` | Centre of screen |
+| `(1.0, 1.0)` | Bottom-right corner |
+
+Sizes (`size`, `hw`, `hh`, `arm_len`, `thickness`) are always in **pixels**, independent of screen resolution. Node defaults (fixation arm length, instruction font size, etc.) scale automatically with screen height so they look consistent at any resolution.
 
 ---
 
@@ -72,7 +80,7 @@ experiment:add(ForBlocks(N_BLOCKS, function(block)
                 Fixation({ duration = 500 }),
                 Stimulus({
                     stim        = Stim.text(trial == "left" and "<" or ">",
-                                      { size = 0.12, color = "white", align = "center" }),
+                                      { size = 64, color = "white", align = "center" }),
                     keys        = RESPONSE_KEYS,
                     timeout     = 2000,
                     correct_key = trial,

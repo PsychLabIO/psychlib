@@ -13,7 +13,7 @@ Pseudo-random number generation and sequence utilities.
 Returns a uniformly distributed random integer in the inclusive range `[lo, hi]`. Returns `lo` if `lo >= hi`.
 
 ```lua
-local side = Rand.int(1, 2)   -- 1 or 2
+local side = Rand.int(1, 2) -- 1 or 2
 ```
 
 ---
@@ -23,7 +23,7 @@ local side = Rand.int(1, 2)   -- 1 or 2
 Returns a uniformly distributed random float in `[lo, hi)`.
 
 ```lua
-local jitter = Rand.float(400, 600)   -- e.g. 537.2
+local jitter = Rand.float(400, 600) -- e.g. 537.2
 ```
 
 ---

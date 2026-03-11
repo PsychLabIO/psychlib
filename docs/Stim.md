@@ -6,6 +6,20 @@ Stimulus constructors and color utilities.
 
 ---
 
+## Coordinate system
+
+Positions use **normalised 0–1 coordinates**, top-left origin, y increasing downward:
+
+| Point | Meaning |
+|---|---|
+| `(0.0, 0.0)` | Top-left corner |
+| `(0.5, 0.5)` | Centre of screen |
+| `(1.0, 1.0)` | Bottom-right corner |
+
+Sizes (`size`, `hw`, `hh`, `arm_len`, `thickness`) are in **pixels** and are independent of screen resolution.
+
+---
+
 ## Stimulus constructors
 
 ### `Stim.text(content: string, opts?: table) -> Stimulus`
@@ -16,15 +30,19 @@ A text stimulus rendered at the given position.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `size` | number | - | Font size (must be > 0) |
+| `size` | number | - | Font size in **pixels** (must be > 0) |
 | `color` | Color or string | white | Text color |
 | `align` | string | - | `"left"`, `"center"`, or `"right"` |
 | `font` | string | - | Font family name |
-| `x` | number | 0.0 | Horizontal position (normalised screen coords) |
-| `y` | number | 0.0 | Vertical position (normalised screen coords) |
+| `x` | number | 0.5 | Horizontal position (0–1, left→right) |
+| `y` | number | 0.5 | Vertical position (0–1, top→bottom) |
 
 ```lua
-local prompt = Stim.text("Press F or J", { size = 0.06, color = "white", align = "center" })
+-- Centred text at default position (0.5, 0.5)
+local prompt = Stim.text("Press F or J", { size = 24, color = "white", align = "center" })
+
+-- Positioned in the upper third of the screen
+local cue = Stim.text("FAST", { size = 20, color = "yellow", x = 0.5, y = 0.3 })
 ```
 
 ---
@@ -33,16 +51,18 @@ local prompt = Stim.text("Press F or J", { size = 0.06, color = "white", align =
 
 A fixation cross.
 
+> **Known issue:** The fixation stimulus currently renders as a rect. Fix pending.
+
 **Options:**
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `color` | Color or string | white | Cross color |
-| `arm_len` | number | 0.03 | Half-length of each arm (normalised) |
-| `thickness` | number | 0.005 | Line thickness (normalised) |
+| `arm_len` | number | ~2.8% of screen height | Half-length of each arm in **pixels** |
+| `thickness` | number | ~0.4% of screen height (min 2) | Line thickness in **pixels** |
 
 ```lua
-local fix = Stim.fixation({ color = "white" })
+local fix = Stim.fixation({ color = "white", arm_len = 24, thickness = 4 })
 ```
 
 ---
@@ -53,12 +73,16 @@ A filled rectangle.
 
 | Parameter | Description |
 |---|---|
-| `cx`, `cy` | Centre position (normalised screen coords) |
-| `hw`, `hh` | Half-width and half-height (normalised) |
+| `cx`, `cy` | Centre position (0–1, top-left origin) |
+| `hw`, `hh` | Half-width and half-height in **pixels** |
 | `color` | Fill color (default: white) |
 
 ```lua
-local box = Stim.rect(0, 0, 0.1, 0.05, Stim.color("red"))
+-- A 200×80px white box at centre-screen
+local box = Stim.rect(0.5, 0.5, 100, 40)
+
+-- A red box in the top-right quadrant
+local marker = Stim.rect(0.75, 0.25, 30, 30, Stim.color("red"))
 ```
 
 ---
@@ -67,8 +91,10 @@ local box = Stim.rect(0, 0, 0.1, 0.05, Stim.color("red"))
 
 A full-screen blank stimulus. Defaults to black.
 
+> **Known issue:** Currently non-functional. Fix pending.
+
 ```lua
-local blank = Stim.blank()
+local blank      = Stim.blank()
 local gray_blank = Stim.blank("gray")
 ```
 
@@ -82,14 +108,18 @@ An image loaded from disk.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `cx` | number | 0.0 | Centre X (normalised) |
-| `cy` | number | 0.0 | Centre Y (normalised) |
-| `hw` | number | 0.5 | Half-width (normalised) |
-| `hh` | number | 0.5 | Half-height (normalised) |
+| `cx` | number | 0.5 | Centre X (0–1, left→right) |
+| `cy` | number | 0.5 | Centre Y (0–1, top→bottom) |
+| `hw` | number | 200 | Half-width in **pixels** |
+| `hh` | number | 200 | Half-height in **pixels** |
 | `tint` | Color or string | white | Multiplicative tint |
 
 ```lua
-local face = Stim.image("stimuli/face_01.png", { hw = 0.3, hh = 0.3 })
+-- 400×400px image at centre
+local face = Stim.image("stimuli/face_01.png", { hw = 200, hh = 200 })
+
+-- 300×200px image in the lower half
+local scene = Stim.image("stimuli/scene.png", { cx = 0.5, cy = 0.7, hw = 150, hh = 100 })
 ```
 
 To avoid a loading delay on first presentation, preload images at the start of the experiment using `Stim.preload`:
@@ -107,7 +137,7 @@ Combines multiple stimuli into a single stimulus drawn in order. `parts` must be
 ```lua
 local display = Stim.composite({
     Stim.fixation(),
-    Stim.text("+5", { color = "yellow", y = 0.3 }),
+    Stim.text("+5", { size = 28, color = "yellow", y = 0.65 }),
 })
 ```
 

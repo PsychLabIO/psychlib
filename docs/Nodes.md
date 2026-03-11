@@ -1,6 +1,6 @@
 # Timeline Nodes
 
-Experiments in psychlib are built by composing **nodes**, which are plain Lua tables with a single `run()` method. Nodes declare what should happen; the runtime executes them in order when `experiment:run()` is called.
+Experiments in psychlib are built by composing **nodes**, plain Lua tables with a single `run()` method. Nodes declare what should happen; the runtime executes them in order when `experiment:run()` is called.
 
 All node constructors are available as globals. No `require` calls are needed.
 
@@ -14,7 +14,7 @@ The root container. Add nodes with `:add()`, set the output format with `:set_fo
 
 ```lua
 local experiment = Timeline()
-experiment:set_format("json")
+experiment:set_format("json")  -- "csv" (default) | "json" | "both"
 
 experiment:add(Instructions({ text = "Welcome." }))
 experiment:add(Save())
@@ -124,7 +124,7 @@ If(function() return ctx.last_response.correct end,
 
 ### `Loop(predicate, node)`
 
-Runs `node` repeatedly while `predicate()` returns true. The predicate is evaluated before each iteration (while-style). Use with care, an always-true predicate will loop forever.
+Runs `node` repeatedly while `predicate()` returns true. The predicate is evaluated before each iteration (while-style). Use with care as an always-true predicate will loop forever.
 
 ```lua
 local attempts = 0
@@ -132,6 +132,7 @@ Loop(
     function() return attempts < 3 end,
     Sequence({
         Stimulus({ stim = probe, keys = {"space"}, timeout = 2000 }),
+        -- some node that increments attempts
     })
 )
 ```
@@ -149,6 +150,7 @@ Instructions({
     text = "Press F for faces, H for houses.\n\nPress any key to begin.",
 })
 
+-- auto-advance version
 Instructions({
     text = "Get ready...",
     duration = 1500,
@@ -159,6 +161,10 @@ Instructions({
 |---|---|---|---|
 | `text` | string | required | Text to display. |
 | `duration` | number | nil | If set, auto-advance after this many ms. |
+| `size` | number | auto | Font size in px. Defaults to ~4% of screen height. |
+| `color` | Color or string | `"white"` | Text color. |
+| `align` | string | `"center"` | `"left"`, `"center"`, or `"right"`. |
+| `font` | string | nil | Font family name. |
 
 ---
 
@@ -167,12 +173,19 @@ Instructions({
 Shows a fixation cross for a fixed duration (ms), then returns.
 
 ```lua
+-- Default style
 Fixation({ duration = 500 })
+
+-- Custom size and color
+Fixation({ duration = 500, arm_len = 30, thickness = 5, color = "yellow" })
 ```
 
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `duration` | number | required | Display duration in ms. |
+| `color` | Color or string | `"white"` | Cross color. |
+| `arm_len` | number | auto | Arm half-length in px. Defaults to ~2.8% of screen height. |
+| `thickness` | number | auto | Line thickness in px. Defaults to ~0.4% of screen height (min 2). |
 
 ---
 
@@ -182,10 +195,10 @@ Shows `stim`, collects a keypress, and writes the result to `ctx.last_response`.
 
 ```lua
 Stimulus({
-    stim = Stim.text("<<><<", { size = 0.08, color = "white", align = "center" }),
-    keys = { "left", "right" },
-    timeout = 1500,
-    correct_key = "right",
+    stim        = Stim.text(">><<<", { size = 48, color = "white", align = "center" }),
+    keys        = { "left", "right" },
+    timeout     = 1500,
+    correct_key = "left",
 })
 ```
 
@@ -219,6 +232,8 @@ Blank({ duration = 800 })
 |---|---|---|---|
 | `duration` | number | required | Blank duration in ms. |
 
+> **Note:** `Blank` uses the window background color. To show a specific color, use `Stimulus` with `stim = Stim.blank("gray")` instead.
+
 ---
 
 ### `Feedback({ correct_text, incorrect_text, duration })`
@@ -226,10 +241,20 @@ Blank({ duration = 800 })
 Reads `ctx.last_response.correct` and displays the appropriate text for `duration` ms. Must be placed after a `Stimulus` node.
 
 ```lua
+-- Basic
 Feedback({
     correct_text = "Correct!",
     incorrect_text = "Incorrect.",
     duration = 600,
+})
+
+-- With color coding
+Feedback({
+    correct_text = "Correct!",
+    incorrect_text = "Wrong.",
+    duration = 600,
+    correct_color = "green",
+    incorrect_color = "red",
 })
 ```
 
@@ -238,6 +263,12 @@ Feedback({
 | `correct_text` | string | required | Shown when `ctx.last_response.correct` is true. |
 | `incorrect_text` | string | required | Shown when `ctx.last_response.correct` is false. |
 | `duration` | number | required | Display duration in ms. |
+| `size` | number | auto | Font size in px. Defaults to ~5.2% of screen height. |
+| `correct_color` | Color or string | `"white"` | Color for correct text. |
+| `incorrect_color` | Color or string | `"white"` | Color for incorrect text. |
+| `color` | Color or string | `"white"` | Fallback color for both; overridden by `correct_color`/`incorrect_color`. |
+| `align` | string | `"center"` | `"left"`, `"center"`, or `"right"`. |
+| `font` | string | nil | Font family name. |
 
 > **Note:** `Feedback` requires that `Stimulus` was given a `correct_key`. If `ctx.last_response` is nil or `correct` is nil, a runtime error is raised.
 
@@ -258,6 +289,10 @@ EndScreen({
 |---|---|---|---|
 | `text` | string | required | Text to display. |
 | `duration` | number | nil | If set, auto-advance after this many ms. |
+| `size` | number | auto | Font size in px. Defaults to ~4% of screen height. |
+| `color` | Color or string | `"white"` | Text color. |
+| `align` | string | `"center"` | `"left"`, `"center"`, or `"right"`. |
+| `font` | string | nil | Font family name. |
 
 ---
 

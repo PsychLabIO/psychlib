@@ -1,6 +1,6 @@
 # Data
 
-Trial-level data recording is handled by the `Record` and `Save` [timeline nodes](nodes.md). Data flows through `ctx` and is written explicitly with `Record`.
+Trial-level data recording is handled by the `Record` and `Save` [timeline nodes](nodes.md).
 
 ---
 
