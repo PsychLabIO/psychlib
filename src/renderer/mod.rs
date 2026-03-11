@@ -36,9 +36,11 @@ pub enum RenderEvent {
 
 /// Script thread's handle to the render loop.
 pub struct RenderHandle {
-    pub cmd_tx: mpsc::SyncSender<RenderCommand>,
-    pub event_rx: mpsc::Receiver<RenderEvent>,
-    pub proxy: EventLoopProxy<WakeUp>,
+    pub(crate) cmd_tx: mpsc::SyncSender<RenderCommand>,
+    pub(crate) event_rx: mpsc::Receiver<RenderEvent>,
+    pub(crate) proxy: EventLoopProxy<WakeUp>,
+    pub screen_w: f32,
+    pub screen_h: f32,
 }
 
 impl RenderHandle {
@@ -101,5 +103,9 @@ impl RenderHandle {
                 RenderEvent::ImageLoaded(_) | RenderEvent::ImageLoadFailed(_) => continue,
             }
         }
+    }
+
+    pub fn screen_size(&self) -> Option<(f32, f32)> {
+        Some((self.screen_w, self.screen_h))
     }
 }

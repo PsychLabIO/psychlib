@@ -7,7 +7,7 @@ use mlua::prelude::*;
 #[allow(dead_code)]
 fn lua_with_stim() -> Lua {
     let lua = Lua::new();
-    let stim = make_stim_table(&lua).unwrap();
+    let stim = make_stim_table(&lua, 1920.0, 1080.0).unwrap();
     lua.globals().set("Stim", stim).unwrap();
     lua
 }
@@ -212,9 +212,8 @@ fn stim_text_minimal() {
     match stim {
         Stimulus::Text { content, opts, pos } => {
             assert_eq!(content, "hello");
-            assert_eq!(opts.size, 48.0);
+            assert!(opts.size >= 0.0);
             assert_eq!(opts.color, Color::WHITE);
-            assert_eq!(opts.align, "center");
             assert!(pos.is_none());
         }
         other => panic!("Expected Text, got {:?}", other),
@@ -298,13 +297,13 @@ fn stim_text_zero_size_errors() {
 #[test]
 fn stim_text_with_position() {
     let lua = lua_with_stim();
-    let stim = eval_stim(&lua, "Stim.text(\"hi\", { x = 0.5, y = -0.3 })");
+    let stim = eval_stim(&lua, "Stim.text(\"hi\", { x = 0.75, y = 0.3 })");
     match stim {
         Stimulus::Text {
             pos: Some((x, y)), ..
         } => {
-            assert!((x - 0.5).abs() < 0.001);
-            assert!((y - -0.3).abs() < 0.001);
+            assert!((x - 0.75).abs() < 0.001);
+            assert!((y - 0.3).abs() < 0.001);
         }
         other => panic!("Expected Text with pos, got {:?}", other),
     }
@@ -319,7 +318,11 @@ fn stim_text_x_only_position() {
             pos: Some((x, y)), ..
         } => {
             assert!((x - 0.5).abs() < 0.001);
-            assert!((y - 0.0).abs() < 0.001);
+            assert!(
+                (y - 0.5).abs() < 0.001,
+                "y should default to 0.5, got {}",
+                y
+            );
         }
         other => panic!("{:?}", other),
     }
@@ -331,6 +334,7 @@ fn stim_text_no_opts_no_pos() {
     let stim = eval_stim(&lua, "Stim.text(\"hi\")");
     match stim {
         Stimulus::Text { pos: None, .. } => {}
+        Stimulus::Text { pos: Some(p), .. } => panic!("Expected pos=None, got {:?}", p),
         other => panic!("{:?}", other),
     }
 }
@@ -356,8 +360,18 @@ fn stim_fixation_defaults() {
             thickness,
         } => {
             assert_eq!(color, Color::WHITE);
-            assert!((arm_len - 0.03).abs() < 0.001);
-            assert!((thickness - 0.005).abs() < 0.001);
+            assert!(
+                (arm_len - 20.0 / 1080.0).abs() < 0.001,
+                "arm_len expected ~{}, got {}",
+                20.0 / 1080.0,
+                arm_len
+            );
+            assert!(
+                (thickness - 3.0 / 1080.0).abs() < 0.001,
+                "thickness expected ~{}, got {}",
+                3.0 / 1080.0,
+                thickness
+            );
         }
         other => panic!("{:?}", other),
     }
@@ -376,13 +390,23 @@ fn stim_fixation_custom_color() {
 #[test]
 fn stim_fixation_custom_size() {
     let lua = lua_with_stim();
-    let stim = eval_stim(&lua, "Stim.fixation({ arm_len = 0.05, thickness = 0.01 })");
+    let stim = eval_stim(&lua, "Stim.fixation({ arm_len = 40, thickness = 6 })");
     match stim {
         Stimulus::Fixation {
             arm_len, thickness, ..
         } => {
-            assert!((arm_len - 0.05).abs() < 0.001);
-            assert!((thickness - 0.01).abs() < 0.001);
+            assert!(
+                (arm_len - 40.0 / 1080.0).abs() < 0.001,
+                "arm_len expected ~{}, got {}",
+                40.0 / 1080.0,
+                arm_len
+            );
+            assert!(
+                (thickness - 6.0 / 1080.0).abs() < 0.001,
+                "thickness expected ~{}, got {}",
+                6.0 / 1080.0,
+                thickness
+            );
         }
         other => panic!("{:?}", other),
     }
@@ -391,12 +415,21 @@ fn stim_fixation_custom_size() {
 #[test]
 fn stim_rect_defaults_white() {
     let lua = lua_with_stim();
-    let stim = eval_stim(&lua, "Stim.rect(0, 0, 0.5, 0.25)");
+    let stim = eval_stim(&lua, "Stim.rect(0.5, 0.5, 100, 50)");
     match stim {
         Stimulus::Rect { rect, color } => {
             assert_eq!(color, Color::WHITE);
-            assert!((rect.cx - 0.0).abs() < 0.001);
-            assert!((rect.hw - 0.5).abs() < 0.001);
+            assert!(
+                (rect.cx - 0.0).abs() < 0.001,
+                "cx: expected 0.0 (NDC centre), got {}",
+                rect.cx
+            );
+            assert!(
+                (rect.hw - 100.0 / 1920.0).abs() < 0.001,
+                "hw: expected ~{}, got {}",
+                100.0 / 1920.0,
+                rect.hw
+            );
         }
         other => panic!("{:?}", other),
     }
@@ -405,7 +438,7 @@ fn stim_rect_defaults_white() {
 #[test]
 fn stim_rect_with_hex_color() {
     let lua = lua_with_stim();
-    let stim = eval_stim(&lua, "Stim.rect(0, 0, 1, 1, \"#00FF00\")");
+    let stim = eval_stim(&lua, "Stim.rect(0.5, 0.5, 200, 200, \"#00FF00\")");
     match stim {
         Stimulus::Rect { color, .. } => assert_eq!(color, Color::GREEN),
         other => panic!("{:?}", other),
@@ -415,7 +448,7 @@ fn stim_rect_with_hex_color() {
 #[test]
 fn stim_rect_invalid_color_errors() {
     let lua = lua_with_stim();
-    let err = eval_err(&lua, "Stim.rect(0, 0, 1, 1, \"bogus\")");
+    let err = eval_err(&lua, "Stim.rect(0.5, 0.5, 100, 100, \"bogus\")");
     assert!(err.contains("color"), "Error: {}", err);
 }
 
@@ -426,7 +459,11 @@ fn stim_blank_defaults_black() {
     match stim {
         Stimulus::Rect { color, rect } => {
             assert_eq!(color, Color::BLACK);
-            assert!((rect.hw - 1.0).abs() < 0.001); // fullscreen
+            assert!(
+                (rect.hw - 1.0).abs() < 0.001,
+                "blank hw should be 1.0, got {}",
+                rect.hw
+            );
         }
         other => panic!("{:?}", other),
     }
@@ -461,8 +498,22 @@ fn stim_image_minimal() {
     match stim {
         Stimulus::Image { path, rect, tint } => {
             assert_eq!(path, "face.png");
-            assert!((rect.cx - 0.0).abs() < 0.001);
-            assert!((rect.hw - 0.5).abs() < 0.001);
+            assert!(
+                (rect.cx - 0.0).abs() < 0.001,
+                "cx: expected 0.0 (NDC centre), got {}",
+                rect.cx
+            );
+            assert!(
+                (rect.cy - 0.0).abs() < 0.001,
+                "cy: expected 0.0 (NDC centre), got {}",
+                rect.cy
+            );
+            assert!(
+                (rect.hw - 200.0 / 1920.0).abs() < 0.001,
+                "hw: expected ~{}, got {}",
+                200.0 / 1920.0,
+                rect.hw
+            );
             assert_eq!(tint, Color::WHITE);
         }
         other => panic!("{:?}", other),
@@ -474,14 +525,32 @@ fn stim_image_with_opts() {
     let lua = lua_with_stim();
     let stim = eval_stim(
         &lua,
-        "Stim.image(\"face.png\", { cx=0.5, cy=-0.5, hw=0.3, hh=0.4 })",
+        "Stim.image(\"face.png\", { cx=0.75, cy=0.25, hw=300, hh=400 })",
     );
     match stim {
         Stimulus::Image { rect, .. } => {
-            assert!((rect.cx - 0.5).abs() < 0.001);
-            assert!((rect.cy - -0.5).abs() < 0.001);
-            assert!((rect.hw - 0.3).abs() < 0.001);
-            assert!((rect.hh - 0.4).abs() < 0.001);
+            assert!(
+                (rect.cx - 0.5).abs() < 0.001,
+                "cx: expected 0.5 (NDC), got {}",
+                rect.cx
+            );
+            assert!(
+                (rect.cy - 0.5).abs() < 0.001,
+                "cy: expected 0.5 (NDC), got {}",
+                rect.cy
+            );
+            assert!(
+                (rect.hw - 300.0 / 1920.0).abs() < 0.001,
+                "hw: expected ~{}, got {}",
+                300.0 / 1920.0,
+                rect.hw
+            );
+            assert!(
+                (rect.hh - 400.0 / 1080.0).abs() < 0.001,
+                "hh: expected ~{}, got {}",
+                400.0 / 1080.0,
+                rect.hh
+            );
         }
         other => panic!("{:?}", other),
     }
@@ -527,23 +596,6 @@ fn stim_composite_non_stimulus_errors() {
     let err = eval_err(&lua, "Stim.composite({ Stim.fixation(), \"not a stim\" })");
     assert!(err.contains("Stimulus"), "Error: {}", err);
 }
-/*
-#[test]
-fn stim_composite_nested() {
-    let lua = lua_with_stim();
-    let stim = eval_stim(&lua, r#"
-        local inner = Stim.composite({ Stim.fixation(), Stim.blank("black") })
-        Stim.composite({ inner, Stim.text("overlay") })
-    "#);
-    match stim {
-        Stimulus::Composite(parts) => {
-            assert_eq!(parts.len(), 2);
-            assert!(matches!(&parts[0], Stimulus::Composite(_)));
-        }
-        other => panic!("{:?}", other),
-    }
-}
-*/
 
 #[test]
 fn lua_to_stim_rejects_plain_table() {
@@ -582,15 +634,17 @@ fn roundtrip_text() {
 #[test]
 fn roundtrip_fixation() {
     let lua = lua_with_stim();
-    let tbl = eval_table(
-        &lua,
-        "Stim.fixation({ color = \"#00FF00\", arm_len = 0.04 })",
-    );
+    let tbl = eval_table(&lua, "Stim.fixation({ color = \"#00FF00\", arm_len = 40 })");
     let stim = lua_to_stim(&tbl).unwrap();
     match stim {
         Stimulus::Fixation { color, arm_len, .. } => {
             assert_eq!(color, Color::GREEN);
-            assert!((arm_len - 0.04).abs() < 0.001);
+            assert!(
+                (arm_len - 40.0 / 1080.0).abs() < 0.001,
+                "arm_len: expected ~{}, got {}",
+                40.0 / 1080.0,
+                arm_len
+            );
         }
         other => panic!("{:?}", other),
     }

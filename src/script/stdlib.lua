@@ -2,6 +2,13 @@ local function make_node(run_fn)
     return { run = run_fn }
 end
 
+local _screen_h = (type(_psychlib_screen_h) == "number" and _psychlib_screen_h) or 768
+
+local TEXT_SIZE_BODY     = math.floor(_screen_h * 0.040)
+local TEXT_SIZE_FEEDBACK = math.floor(_screen_h * 0.052)
+local FIX_ARM_LEN        = math.floor(_screen_h * 0.028)
+local FIX_THICKNESS      = math.max(2, math.floor(_screen_h * 0.004))
+
 function Timeline()
     local self = {
         _nodes = {},
@@ -12,7 +19,6 @@ function Timeline()
     end
 
     --- Declare the output format before experiment:run().
-    --- format: "csv" (default) | "json" | "both"
     function self:set_format(format)
         _psychlib_set_format(format)
     end
@@ -40,7 +46,6 @@ function Sequence(nodes)
     end)
 end
 
---- Iterate `n` blocks. `fn(block)` is called lazily at each iteration and must return a node.
 function ForBlocks(n, fn)
     return make_node(function()
         for block = 1, n do
@@ -51,7 +56,6 @@ function ForBlocks(n, fn)
     end)
 end
 
---- Iterate a trial list. `fn(trial)` is called lazily at each iteration and must return a node.
 function ForTrials(list, fn)
     return make_node(function()
         for _, trial in ipairs(list) do
@@ -84,11 +88,17 @@ function Loop(predicate, node)
     end)
 end
 
---- Show a text screen and wait for a keypress. If `duration` is set (ms)
+--- Show a text screen and wait for a keypress. If `duration` is set (ms),
+--- auto-advance after that time instead.
 function Instructions(opts)
     assert(type(opts.text) == "string", "Instructions: text is required")
     return make_node(function()
-        local stim = Stim.text(opts.text, { size = 0.04, color = "white", align = "center" })
+        local stim = Stim.text(opts.text, {
+            size  = opts.size  or TEXT_SIZE_BODY,
+            color = opts.color or "white",
+            align = opts.align or "center",
+            font  = opts.font,
+        })
         if opts.duration then
             _psychlib_show(stim, opts.duration)
         else
@@ -103,7 +113,11 @@ end
 function Fixation(opts)
     assert(type(opts.duration) == "number", "Fixation: duration is required")
     return make_node(function()
-        local stim = Stim.fixation({ color = "white", arm_len = 0.05, thickness = 0.003 })
+        local stim = Stim.fixation({
+            color     = opts.color     or "white",
+            arm_len   = opts.arm_len   or FIX_ARM_LEN,
+            thickness = opts.thickness or FIX_THICKNESS,
+        })
         _psychlib_show(stim, opts.duration)
     end)
 end
@@ -146,20 +160,31 @@ function Feedback(opts)
     assert(type(opts.duration)       == "number", "Feedback: duration is required")
     return make_node(function()
         assert(ctx.last_response ~= nil,
-            "Feedback: no last_response in ctx - place Feedback after a Stimulus node")
-        local text = ctx.last_response.correct
-            and opts.correct_text
-            or  opts.incorrect_text
-        local stim = Stim.text(text, { size = 0.05, color = "white", align = "center" })
+            "Feedback: no last_response in ctx, place Feedback after a Stimulus node")
+        local is_correct = ctx.last_response.correct
+        local text  = is_correct and opts.correct_text   or opts.incorrect_text
+        local color = is_correct
+            and (opts.correct_color   or opts.color or "white")
+            or  (opts.incorrect_color or opts.color or "white")
+        local stim = Stim.text(text, {
+            size  = opts.size  or TEXT_SIZE_FEEDBACK,
+            color = color,
+            align = opts.align or "center",
+            font  = opts.font,
+        })
         _psychlib_show(stim, opts.duration)
     end)
 end
 
---- Show a final screen and wait for keypress or duration.
 function EndScreen(opts)
     assert(type(opts.text) == "string", "EndScreen: text is required")
     return make_node(function()
-        local stim = Stim.text(opts.text, { size = 0.05, color = "white", align = "center" })
+        local stim = Stim.text(opts.text, {
+            size  = opts.size  or TEXT_SIZE_BODY,
+            color = opts.color or "white",
+            align = opts.align or "center",
+            font  = opts.font,
+        })
         if opts.duration then
             _psychlib_show(stim, opts.duration)
         else
@@ -169,6 +194,7 @@ function EndScreen(opts)
     end)
 end
 
+--- Write a trial row.
 function Record(fields)
     assert(type(fields) == "table", "Record: fields must be a table")
     return make_node(function()

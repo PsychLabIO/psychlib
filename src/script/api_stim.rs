@@ -1,61 +1,142 @@
 use crate::renderer::stimulus::{Color, Rect, Stimulus, TextOptions};
 use mlua::prelude::*;
 
-pub fn make_stim_table(lua: &Lua) -> LuaResult<LuaTable> {
+/// Convert a 0–1 top-left x position to NDC (-1 to +1).
+#[inline]
+fn x_to_ndc(x: f32) -> f32 {
+    x * 2.0 - 1.0
+}
+
+/// Convert a 0–1 top-left y position to NDC (-1 to +1, y-up).
+#[inline]
+fn y_to_ndc(y: f32) -> f32 {
+    -(y * 2.0 - 1.0)
+}
+
+/// Convert a pixel half-dimension to NDC space along the x axis.
+#[inline]
+fn px_hw_to_ndc(px: f32, screen_w: f32) -> f32 {
+    px / screen_w
+}
+
+/// Convert a pixel half-dimension to NDC space along the y axis.
+#[inline]
+fn px_hh_to_ndc(px: f32, screen_h: f32) -> f32 {
+    px / screen_h
+}
+
+/// Convert a pixel size (font size, arm length, etc.) to NDC height units.
+#[inline]
+fn px_to_ndc_h(px: f32, screen_h: f32) -> f32 {
+    px / screen_h
+}
+
+/// Build a `Rect` from script-space centre position (0–1) and pixel
+/// half-dimensions, converting to NDC for the renderer.
+fn rect_from_script(
+    cx: f32,
+    cy: f32,
+    hw_px: f32,
+    hh_px: f32,
+    screen_w: f32,
+    screen_h: f32,
+) -> Rect {
+    Rect::new(
+        x_to_ndc(cx),
+        y_to_ndc(cy),
+        px_hw_to_ndc(hw_px, screen_w),
+        px_hh_to_ndc(hh_px, screen_h),
+    )
+}
+
+/// Fallback screen size for unit-test
+#[allow(dead_code)]
+const DEFAULT_SCREEN_W: f32 = 1920.0;
+#[allow(dead_code)]
+const DEFAULT_SCREEN_H: f32 = 1080.0;
+
+pub fn make_stim_table(lua: &Lua, screen_w: f32, screen_h: f32) -> LuaResult<LuaTable> {
     let t = lua.create_table()?;
-    t.set(
-        "text",
-        lua.create_function(|lua_ctx, (content, opts): (String, Option<LuaTable>)| {
-            let text_opts = parse_text_opts(opts.as_ref())?;
-            let pos = parse_pos(opts.as_ref());
-            stim_to_lua(
-                lua_ctx,
-                Stimulus::Text {
-                    content,
-                    opts: text_opts,
-                    pos,
-                },
-            )
-        })?,
-    )?;
+    {
+        let sh = screen_h;
+        t.set(
+            "text",
+            lua.create_function(
+                move |lua_ctx, (content, opts): (String, Option<LuaTable>)| {
+                    let text_opts = parse_text_opts(opts.as_ref(), sh)?;
 
-    t.set(
-        "fixation",
-        lua.create_function(|lua_ctx, opts: Option<LuaTable>| {
-            let color = opt_color(opts.as_ref(), "color", Color::WHITE)?;
-            let arm_len = opt_f32(opts.as_ref(), "arm_len", 0.03);
-            let thickness = opt_f32(opts.as_ref(), "thickness", 0.005);
-            stim_to_lua(
-                lua_ctx,
-                Stimulus::Fixation {
-                    color,
-                    arm_len,
-                    thickness,
+                    let has_x = opts
+                        .as_ref()
+                        .and_then(|o| o.get::<Option<f32>>("x").ok().flatten())
+                        .is_some();
+                    let has_y = opts
+                        .as_ref()
+                        .and_then(|o| o.get::<Option<f32>>("y").ok().flatten())
+                        .is_some();
+                    let pos = if has_x || has_y {
+                        let x = opt_f32(opts.as_ref(), "x", 0.5);
+                        let y = opt_f32(opts.as_ref(), "y", 0.5);
+                        Some((x, y))
+                    } else {
+                        None
+                    };
+                    stim_to_lua(
+                        lua_ctx,
+                        Stimulus::Text {
+                            content,
+                            opts: text_opts,
+                            pos,
+                        },
+                    )
                 },
-            )
-        })?,
-    )?;
+            )?,
+        )?;
+    }
 
-    t.set(
-        "rect",
-        lua.create_function(
-            |lua_ctx, (cx, cy, hw, hh, color_v): (f32, f32, f32, f32, Option<LuaValue>)| {
-                let color = color_v
-                    .as_ref()
-                    .filter(|v| !matches!(v, LuaValue::Nil))
-                    .map(|v| parse_color_value(v).ok_or_else(|| color_err("Stim.rect")))
-                    .transpose()?
-                    .unwrap_or(Color::WHITE);
+    {
+        let sh = screen_h;
+        t.set(
+            "fixation",
+            lua.create_function(move |lua_ctx, opts: Option<LuaTable>| {
+                let color = opt_color(opts.as_ref(), "color", Color::WHITE)?;
+                let arm_len_px = opt_f32(opts.as_ref(), "arm_len", 20.0);
+                let thickness_px = opt_f32(opts.as_ref(), "thickness", 3.0);
                 stim_to_lua(
                     lua_ctx,
-                    Stimulus::Rect {
-                        rect: Rect::new(cx, cy, hw, hh),
+                    Stimulus::Fixation {
                         color,
+                        arm_len: px_to_ndc_h(arm_len_px, sh),
+                        thickness: px_to_ndc_h(thickness_px, sh),
                     },
                 )
-            },
-        )?,
-    )?;
+            })?,
+        )?;
+    }
+
+    {
+        let sw = screen_w;
+        let sh = screen_h;
+        t.set(
+            "rect",
+            lua.create_function(
+                move |lua_ctx, (cx, cy, hw_px, hh_px, color_v): (f32, f32, f32, f32, Option<LuaValue>)| {
+                    let color = color_v
+                        .as_ref()
+                        .filter(|v| !matches!(v, LuaValue::Nil))
+                        .map(|v| parse_color_value(v).ok_or_else(|| color_err("Stim.rect")))
+                        .transpose()?
+                        .unwrap_or(Color::WHITE);
+                    stim_to_lua(
+                        lua_ctx,
+                        Stimulus::Rect {
+                            rect: rect_from_script(cx, cy, hw_px, hh_px, sw, sh),
+                            color,
+                        },
+                    )
+                },
+            )?,
+        )?;
+    }
 
     t.set(
         "blank",
@@ -70,24 +151,28 @@ pub fn make_stim_table(lua: &Lua) -> LuaResult<LuaTable> {
         })?,
     )?;
 
-    t.set(
-        "image",
-        lua.create_function(|lua_ctx, (path, opts): (String, Option<LuaTable>)| {
-            let cx = opt_f32(opts.as_ref(), "cx", 0.0);
-            let cy = opt_f32(opts.as_ref(), "cy", 0.0);
-            let hw = opt_f32(opts.as_ref(), "hw", 0.5);
-            let hh = opt_f32(opts.as_ref(), "hh", 0.5);
-            let tint = opt_color(opts.as_ref(), "tint", Color::WHITE)?;
-            stim_to_lua(
-                lua_ctx,
-                Stimulus::Image {
-                    path,
-                    rect: Rect::new(cx, cy, hw, hh),
-                    tint,
-                },
-            )
-        })?,
-    )?;
+    {
+        let sw = screen_w;
+        let sh = screen_h;
+        t.set(
+            "image",
+            lua.create_function(move |lua_ctx, (path, opts): (String, Option<LuaTable>)| {
+                let cx = opt_f32(opts.as_ref(), "cx", 0.5);
+                let cy = opt_f32(opts.as_ref(), "cy", 0.5);
+                let hw_px = opt_f32(opts.as_ref(), "hw", 200.0);
+                let hh_px = opt_f32(opts.as_ref(), "hh", 200.0);
+                let tint = opt_color(opts.as_ref(), "tint", Color::WHITE)?;
+                stim_to_lua(
+                    lua_ctx,
+                    Stimulus::Image {
+                        path,
+                        rect: rect_from_script(cx, cy, hw_px, hh_px, sw, sh),
+                        tint,
+                    },
+                )
+            })?,
+        )?;
+    }
 
     t.set(
         "composite",
@@ -117,7 +202,7 @@ pub fn make_stim_table(lua: &Lua) -> LuaResult<LuaTable> {
             let color = parse_color_str(&spec).ok_or_else(|| {
                 LuaError::runtime(format!(
                     "Stim.color: unknown color {:?} \
-             (use \"#RRGGBB\", \"#RRGGBBAA\", or a named color such as \"white\")",
+                     (use \"#RRGGBB\", \"#RRGGBBAA\", or a named color such as \"white\")",
                     spec
                 ))
             })?;
@@ -142,10 +227,11 @@ pub fn make_stim_table(lua: &Lua) -> LuaResult<LuaTable> {
         })?,
     )?;
 
+    t.set("preload", lua.create_function(|_, _path: String| Ok(()))?)?;
+
     Ok(t)
 }
 
-/// Encode a `Stimulus` as `{ __type = "Stimulus", __json = "..." }`.
 fn stim_to_lua(lua: &Lua, stim: Stimulus) -> LuaResult<LuaTable> {
     let json = serde_json::to_string(&stim)
         .map_err(|e| LuaError::runtime(format!("stimulus serialization: {e}")))?;
@@ -155,7 +241,6 @@ fn stim_to_lua(lua: &Lua, stim: Stimulus) -> LuaResult<LuaTable> {
     Ok(tbl)
 }
 
-/// Decode a `Stimulus` from a table produced by `stim_to_lua`.
 pub fn lua_to_stim(tbl: &LuaTable) -> LuaResult<Stimulus> {
     let ty: Option<String> = tbl.get("__type").ok();
     if ty.as_deref() != Some("Stimulus") {
@@ -182,7 +267,6 @@ pub fn color_to_lua(lua: &Lua, c: Color) -> LuaResult<LuaTable> {
     Ok(tbl)
 }
 
-/// Decode a `Color` from any valid Lua color representation.
 pub fn parse_color_value(val: &LuaValue) -> Option<Color> {
     match val {
         LuaValue::Table(tbl) => {
@@ -222,15 +306,16 @@ pub fn parse_color_str(s: &str) -> Option<Color> {
     })
 }
 
-fn parse_text_opts(opts: Option<&LuaTable>) -> LuaResult<TextOptions> {
+fn parse_text_opts(opts: Option<&LuaTable>, screen_h: f32) -> LuaResult<TextOptions> {
+    let _ = screen_h; // fix later
     let mut out = TextOptions::default();
     let Some(o) = opts else { return Ok(out) };
 
-    if let Some(size) = o.get::<Option<f32>>("size")? {
-        if size <= 0.0 {
+    if let Some(size_px) = o.get::<Option<f32>>("size")? {
+        if size_px <= 0.0 {
             return Err(LuaError::runtime("Stim.text: size must be > 0"));
         }
-        out.size = size;
+        out.size = size_px;
     }
 
     let color_val: LuaValue = o.get("color")?;
@@ -260,18 +345,6 @@ fn parse_text_opts(opts: Option<&LuaTable>) -> LuaResult<TextOptions> {
     }
 
     Ok(out)
-}
-
-fn parse_pos(opts: Option<&LuaTable>) -> Option<(f32, f32)> {
-    let o = opts?;
-    let x: Option<f32> = o.get::<Option<f32>>("x").ok().flatten();
-    let y: Option<f32> = o.get::<Option<f32>>("y").ok().flatten();
-    match (x, y) {
-        (None, None) => None,
-        (Some(x), Some(y)) => Some((x, y)),
-        (Some(x), None) => Some((x, 0.0)),
-        (None, Some(y)) => Some((0.0, y)),
-    }
 }
 
 fn opt_color(opts: Option<&LuaTable>, key: &str, default: Color) -> LuaResult<Color> {

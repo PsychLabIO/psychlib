@@ -62,10 +62,15 @@ impl RenderLoop {
 
         let proxy = event_loop.create_proxy();
 
+        let screen_w = config.width as f32;
+        let screen_h = config.height as f32;
+
         let handle = RenderHandle {
             cmd_tx,
             event_rx,
             proxy,
+            screen_w,
+            screen_h,
         };
 
         let rl = Self {
@@ -81,6 +86,7 @@ impl RenderLoop {
             current: None,
             dirty: false,
         };
+
         (handle, event_loop, rl)
     }
 

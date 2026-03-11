@@ -25,6 +25,7 @@ pub(crate) struct HostState {
     #[allow(dead_code)]
     pub header: SessionHeader,
     pub render_handle: Arc<Mutex<Option<crate::renderer::RenderHandle>>>,
+    pub screen_size: Arc<Mutex<(f32, f32)>>,
 }
 
 impl HostState {
@@ -67,6 +68,7 @@ impl ScriptHost {
             output_dir: output_dir.to_path_buf(),
             header,
             render_handle: Arc::new(Mutex::new(None)),
+            screen_size: Arc::new(Mutex::new((1920.0, 1080.0))),
         };
 
         let globals = lua.globals();
@@ -76,8 +78,12 @@ impl ScriptHost {
 
         globals.set("Clock", api_clock::make_clock_table(&lua, &state)?)?;
         globals.set("Rand", api_rand::make_rand_table(&lua, seed)?)?;
-        globals.set("Stim", api_stim::make_stim_table(&lua)?)?;
+
+        let (sw, sh) = *state.screen_size.lock().expect("screen_size poisoned");
+        globals.set("Stim", api_stim::make_stim_table(&lua, sw, sh)?)?;
+
         globals.set("psychlib_VERSION", env!("CARGO_PKG_VERSION"))?;
+        globals.set("_psychlib_screen_h", sh)?;
 
         drop(globals);
 
@@ -117,7 +123,28 @@ impl ScriptHost {
         &self.lua
     }
 
+    /// Attach a renderer and re-register `Stim` with the real window dimensions.
     pub fn attach_renderer(&self, handle: crate::renderer::RenderHandle) {
+        if let Some(size) = handle.screen_size() {
+            {
+                let mut guard = self.state.screen_size.lock().expect("screen_size poisoned");
+                *guard = size;
+            }
+
+            let (sw, sh) = size;
+            if let Ok(stim_tbl) = api_stim::make_stim_table(&self.lua, sw, sh) {
+                let _ = self.lua.globals().set("Stim", stim_tbl);
+            }
+            let _ = self.lua.globals().set("_psychlib_screen_h", sh);
+            let _ = self.lua.load(
+                "local h = _psychlib_screen_h or 768;                  
+                TEXT_SIZE_BODY = math.floor(h * 0.040);
+                TEXT_SIZE_FEEDBACK = math.floor(h * 0.052);
+                FIX_ARM_LEN = math.floor(h * 0.028);
+                FIX_THICKNESS = math.max(2, math.floor(h * 0.004))"
+            ).exec();
+        }
+
         *self
             .state
             .render_handle

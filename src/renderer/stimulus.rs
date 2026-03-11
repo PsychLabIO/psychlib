@@ -187,7 +187,6 @@ pub enum Stimulus {
     Image {
         path: String,
         rect: Rect,
-        /// Tint colour (default: white = no tint).
         tint: Color,
     },
 

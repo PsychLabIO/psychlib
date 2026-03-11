@@ -2,6 +2,7 @@ use crate::renderer::stimulus::{Color as StimColor, TextOptions};
 use glyphon::{
     Attrs, Buffer, Cache, Color as GlyphColor, FontSystem, Metrics, Resolution, Shaping,
     SwashCache, TextArea, TextAtlas, TextBounds, TextRenderer as GlyphonRenderer, Viewport,
+    cosmic_text::Align,
 };
 use wgpu::{Device, MultisampleState, Queue, TextureFormat};
 
@@ -59,11 +60,28 @@ impl TextRenderer {
         let resolution = self.viewport.resolution();
         let (res_w, res_h) = (resolution.width as f32, resolution.height as f32);
 
-        let size_px = opts.size * res_h;
+        let size_px = if opts.size > 0.0 {
+            opts.size
+        } else {
+            tracing::warn!("TextRenderer::draw called with size <= 0 using 32px fallback");
+            32.0
+        };
         let line_height = size_px * 1.2;
 
+        let (sx, sy) = pos.unwrap_or((0.5, 0.5));
+        let anchor_x = sx * res_w;
+        let anchor_y = sy * res_h;
+
+        let g_align = match opts.align.as_str() {
+            "left" => Some(Align::Left),
+            "right" => Some(Align::Right),
+            _ => Some(Align::Center),
+        };
+
         let mut buffer = Buffer::new(&mut self.font_system, Metrics::new(size_px, line_height));
+
         buffer.set_size(&mut self.font_system, Some(res_w), Some(res_h));
+
         buffer.set_text(
             &mut self.font_system,
             content,
@@ -71,34 +89,28 @@ impl TextRenderer {
             Shaping::Advanced,
             None,
         );
+
+        for line in buffer.lines.iter_mut() {
+            line.set_align(g_align);
+        }
+
         buffer.shape_until_scroll(&mut self.font_system, false);
 
         let mut measured_width: f32 = 0.0;
-        for run in buffer.layout_runs() {
-            measured_width = measured_width.max(run.line_w);
-        }
-
-        let (x_px, y_px) = if let Some((nx, ny)) = pos {
-            (((nx + 1.0) * 0.5) * res_w, ((1.0 - ny) * 0.5) * res_h)
-        } else {
-            (res_w * 0.5, res_h * 0.5)
-        };
-
-        let mut line_count = 0usize;
+        let mut line_count: usize = 0;
         for run in buffer.layout_runs() {
             measured_width = measured_width.max(run.line_w);
             line_count += 1;
         }
-
         let measured_height = line_count as f32 * line_height;
 
         let left = match opts.align.as_str() {
-            "center" => x_px - measured_width * 0.5,
-            "right" => x_px - measured_width,
-            _ => x_px,
+            "right" => anchor_x - res_w,
+            "left" => anchor_x,
+            _ => 0.0,
         };
 
-        let top = y_px - measured_height * 0.5;
+        let top = anchor_y - measured_height * 0.5;
 
         let text_area = TextArea {
             buffer: &buffer,

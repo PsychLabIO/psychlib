@@ -16,7 +16,7 @@ local function make_arrows(direction, congruent)
         flanker = direction == "left" and ">>" or "<<"
     end
     return Stim.text(flanker .. centre .. flanker,
-        { size = 0.08, color = "white", align = "center" })
+        { size = 80, color = "white", align = "center" })
 end
 
 local function make_trials()
@@ -32,13 +32,16 @@ local function make_trials()
 end
 
 local experiment = Timeline()
-experiment:set_format("json")
+experiment:set_format("both")
 
 experiment:add(Instructions({
     text = "Flanker Task\n\n" ..
-           "Press LEFT for <   Press RIGHT for >\n" ..
+           "Press LEFT for <\n" ..
+           "Press RIGHT for >\n" ..
            "Respond to the CENTER arrow only.\n\n" ..
            "Press any key to begin.",
+    align = "center",
+    size = 64,
 }))
 
 experiment:add(ForBlocks(N_BLOCKS, function(block)
@@ -66,6 +69,8 @@ experiment:add(ForBlocks(N_BLOCKS, function(block)
                 text = "Block " .. block .. " of " .. N_BLOCKS .. " complete.\n\n" ..
                        "Take a short break.\n" ..
                        "Press any key when ready.",
+                align = "center",
+                size = 64,
             })
         ),
     })
@@ -74,6 +79,8 @@ end))
 experiment:add(EndScreen({
     text = "Task complete. Thank you!",
     duration = 2000,
+    align = "center",
+    size = 64,
 }))
 
 experiment:add(Save())
