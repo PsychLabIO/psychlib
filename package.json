@@ -1,6 +1,6 @@
 {
   "name": "psychlib",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Browser-based psychology experiment runtime",
   "type": "module",
   "main": "./dist/index.js",
@@ -8,18 +8,18 @@
   "exports": {
     ".": {
       "import": "./dist/index.js",
-      "types":  "./dist/index.d.ts"
+      "types": "./dist/index.d.ts"
     }
   },
   "scripts": {
-    "build":         "tsc",
-    "watch":         "tsc --watch",
-    "check":         "tsc --noEmit",
-    "dev:flanker":   "npx esbuild examples/flanker/browser.ts --bundle --format=esm --outfile=examples/flanker/browser.js --sourcemap --servedir=examples/flanker",
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "check": "tsc --noEmit",
+    "dev:flanker": "npx esbuild examples/flanker/browser.ts --bundle --format=esm --outfile=examples/flanker/browser.js --sourcemap --servedir=examples/flanker",
     "build:flanker": "npx esbuild examples/flanker/browser.ts --bundle --format=esm --minify --outfile=examples/flanker/browser.js"
   },
   "devDependencies": {
-    "esbuild":    "^0.27.7",
+    "esbuild": "^0.27.7",
     "typescript": "^5.4.0"
   }
 }
