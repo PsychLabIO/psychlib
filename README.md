@@ -1,11 +1,11 @@
-# PsychLib
+# BrainLib
 
 A TypeScript library for building browser-based psychology experiments. Provides a frame-loop runtime, stimulus rendering, keyboard response collection, and trial data recording.
 
 ## Installation
 
 ```bash
-npm install psychlib
+npm install brainlib
 ```
 
 ## Quick start
@@ -15,7 +15,7 @@ import {
   Canvas2DRenderer, runBrowser,
   SequenceNode, RepeatNode, FunctionNode,
   Stim,
-} from 'psychlib';
+} from 'brainlib';
 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement;
 const renderer = new Canvas2DRenderer(canvas);
