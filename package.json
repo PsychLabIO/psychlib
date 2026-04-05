@@ -1,6 +1,6 @@
 {
   "name": "brainlib",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Browser-based psychology experiment runtime",
   "type": "module",
   "main": "./dist/index.js",
