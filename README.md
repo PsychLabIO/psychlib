@@ -66,9 +66,9 @@ await ctx.show(renderFn, durationMs);
 // Display a stimulus and wait for a keypress (returns null on timeout)
 const response = await ctx.waitResponse(renderFn, ['ArrowLeft', 'ArrowRight'], timeoutMs);
 
-ctx.renderer  // IRenderer — draw directly if needed
-ctx.clock     // Clock — experiment-relative timestamps in ms
-ctx.data      // DataWriter — record trial data
+ctx.renderer  // IRenderer - draw directly if needed
+ctx.clock     // Clock - experiment-relative timestamps in ms
+ctx.data      // DataWriter - record trial data
 ```
 
 ### Stimuli (`Stim.*`)
